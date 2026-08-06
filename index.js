@@ -18,7 +18,14 @@ const client = new Client({
 
 client.once('ready', () => {
   console.log(`Bot online: ${client.user.tag}`);
-  client.user.setActivity('Guarda', { type: ActivityType.Watching });
+
+  client.user.setPresence({
+    status: 'dnd',
+    activities: [{
+      name: '𖤍',
+      type: ActivityType.Watching
+    }]
+  });
 });
 
 client.on('messageCreate', async (message) => {
@@ -48,32 +55,67 @@ client.on('messageCreate', async (message) => {
     // AVATAR
     if (command === 'a' || command === 'avatar') {
       let user = message.mentions.users.first() || message.author;
+
       if (args[0] && !message.mentions.users.first()) {
-        try { user = await client.users.fetch(args[0]); } 
-        catch { return message.reply('ما لقيت هاد العضو.'); }
+        try {
+          user = await client.users.fetch(args[0]);
+        } catch {
+          return message.reply('ما لقيت هاد العضو.');
+        }
       }
+
       const embed = new EmbedBuilder()
-        .setTitle(`Avatar ديال ${user.tag}`)
+        .setAuthor({
+          name: user.username,
+          iconURL: user.displayAvatarURL({ dynamic: true })
+        })
+        .setTitle('Avatar Url')
         .setImage(user.displayAvatarURL({ dynamic: true, size: 4096 }))
         .setColor(0x2b2d31)
-        .setFooter({ text: `ID: ${user.id}` });
+        .setFooter({
+          text: `Requested by ${message.author.username}`,
+          iconURL: message.author.displayAvatarURL({ dynamic: true })
+        });
+
       return message.reply({ embeds: [embed] });
     }
 
     // BANNER
     if (command === 'bn' || command === 'banner') {
       let user = message.mentions.users.first() || message.author;
+
       if (args[0] && !message.mentions.users.first()) {
-        try { user = await client.users.fetch(args[0]); } 
-        catch { return message.reply('ما لقيت هاد العضو.'); }
+        try {
+          user = await client.users.fetch(args[0]);
+        } catch {
+          return message.reply('ما لقيت هاد العضو.');
+        }
       }
+
       user = await client.users.fetch(user.id, { force: true });
-      if (!user.banner) return message.reply('هاد العضو ما عندوش بانر.');
+
+      if (!user.banner) {
+        const embed = new EmbedBuilder()
+          .setTitle('Notice')
+          .setDescription('• Opsss, You don\'t have a banner')
+          .setColor(0x2b2d31);
+
+        return message.reply({ embeds: [embed] });
+      }
+
       const embed = new EmbedBuilder()
-        .setTitle(`Banner ديال ${user.tag}`)
+        .setAuthor({
+          name: user.username,
+          iconURL: user.displayAvatarURL({ dynamic: true })
+        })
+        .setTitle('Banner Url')
         .setImage(user.bannerURL({ dynamic: true, size: 4096 }))
         .setColor(0x2b2d31)
-        .setFooter({ text: `ID: ${user.id}` });
+        .setFooter({
+          text: `Requested by ${message.author.username}`,
+          iconURL: message.author.displayAvatarURL({ dynamic: true })
+        });
+
       return message.reply({ embeds: [embed] });
     }
 
@@ -86,9 +128,11 @@ client.on('messageCreate', async (message) => {
     if (command === 'join') {
       const voiceChannel = message.member.voice.channel;
       if (!voiceChannel) return message.reply('خصك تكون فـ رووم صوتية أولاً.');
+
       try {
         const oldConnection = getVoiceConnection(message.guild.id);
         if (oldConnection) oldConnection.destroy();
+
         joinVoiceChannel({
           channelId: voiceChannel.id,
           guildId: message.guild.id,
@@ -96,6 +140,7 @@ client.on('messageCreate', async (message) => {
           selfDeaf: true,
           selfMute: false
         });
+
         return message.reply(`دخلت لـ **${voiceChannel.name}** وغادي نبقى هنا.`);
       } catch (err) {
         console.error(err);
@@ -103,7 +148,7 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    return; // رسالة عادية → ما يدير والو
+    return;
   }
 
   // ========== الأوامر الخاصة بـ > (غير للمالك) ==========
@@ -113,7 +158,6 @@ client.on('messageCreate', async (message) => {
 
   if (!command) return;
 
-  // إلا ماشي المالك
   if (message.author.id !== OWNER_ID) {
     return message.reply('𝑺𝒊𝒓 𝒕7𝒂𝒘𝒂 <:Ghostface:1535045884415574058>');
   }
@@ -155,6 +199,7 @@ client.on('messageCreate', async (message) => {
           rateLimitPerUser: ch.rateLimitPerUser || 0,
           permissionOverwrites: []
         };
+
         ch.permissionOverwrites.cache.forEach(overwrite => {
           channelData.permissionOverwrites.push({
             id: overwrite.id,
@@ -163,13 +208,19 @@ client.on('messageCreate', async (message) => {
             deny: overwrite.deny.bitfield.toString()
           });
         });
+
         backupData.channels.push(channelData);
       }
 
       const fileName = `backup-${guild.id}-${Date.now()}.json`;
       const filePath = path.join(__dirname, fileName);
       fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2));
-      await message.reply(`تم الحفظ: \`${fileName}\``);
+
+      const embed = new EmbedBuilder()
+        .setDescription(`<a:Check:1535043575522525345> **𝑺𝒂𝒗𝒆𝒅**`)
+        .setColor(0x57F287);
+
+      await message.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
       message.reply('وقع خطأ أثناء الـbackup.');
@@ -187,8 +238,14 @@ client.on('messageCreate', async (message) => {
     try {
       const backupData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       const guild = message.guild;
-      await message.reply('بديت نمسح كلشي + restore... صبر شوية.');
 
+      const startEmbed = new EmbedBuilder()
+        .setDescription('𝐥𝐞𝐚𝐫𝐢𝐧𝐠 𝐭𝐡𝐞 𝐬𝐞𝐫𝐯𝐞𝐫 𝐚𝐧𝐝 𝐫𝐞𝐬𝐭𝐨𝐫𝐢𝐧𝐠 𝐭𝐡𝐞 𝐛𝐚𝐜𝐤𝐮𝐩... 𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 <:Angy:1535050334207213628>')
+        .setColor(0x2b2d31);
+
+      await message.reply({ embeds: [startEmbed] });
+
+      // Clear
       const channels = [...guild.channels.cache.values()];
       for (const ch of channels) {
         await ch.delete().catch(() => {});
@@ -204,6 +261,7 @@ client.on('messageCreate', async (message) => {
         await new Promise(r => setTimeout(r, 300));
       }
 
+      // Restore roles
       for (const roleData of backupData.roles.reverse()) {
         try {
           await guild.roles.create({
@@ -220,7 +278,9 @@ client.on('messageCreate', async (message) => {
         }
       }
 
+      // Restore channels
       const channelMap = new Map();
+
       for (const chData of backupData.channels.filter(c => c.type === ChannelType.GuildCategory)) {
         try {
           const cat = await guild.channels.create({
@@ -247,16 +307,19 @@ client.on('messageCreate', async (message) => {
             rateLimitPerUser: chData.rateLimitPerUser || 0,
             reason: 'Server restore'
           };
+
           if (chData.type === ChannelType.GuildVoice) {
             options.bitrate = chData.bitrate || 64000;
             options.userLimit = chData.userLimit || 0;
           }
+
           await guild.channels.create(options);
           await new Promise(r => setTimeout(r, 400));
         } catch (e) {
           console.log(`Channel failed: ${chData.name}`);
         }
       }
+
       console.log('Restore salat mzyan');
     } catch (err) {
       console.error(err);
@@ -266,19 +329,27 @@ client.on('messageCreate', async (message) => {
   // ========== CLEAR / NUKE (>c) ==========
   if (command === 'c') {
     try {
-      await message.reply('بديت نمسح كلشي... صبر شوية.');
+      const embed = new EmbedBuilder()
+        .setDescription('𝐒𝐞𝐫𝐯𝐞𝐫 𝐜𝐥𝐞𝐚𝐫𝐢𝐧𝐠 𝐢𝐧 𝐩𝐫𝐨𝐠𝐫𝐞𝐬𝐬... 𝐏𝐥𝐞𝐚𝐬𝐞 𝐰𝐚𝐢𝐭 <:Ghostface:1535045884415574058>')
+        .setColor(0x2b2d31);
+
+      await message.reply({ embeds: [embed] });
+
       const channels = [...message.guild.channels.cache.values()];
       for (const ch of channels) {
         await ch.delete().catch(() => {});
         await new Promise(r => setTimeout(r, 350));
       }
+
       const roles = [...message.guild.roles.cache.values()]
         .filter(r => r.id !== message.guild.id && !r.managed && r.editable)
         .sort((a, b) => b.position - a.position);
+
       for (const role of roles) {
         await role.delete().catch(() => {});
         await new Promise(r => setTimeout(r, 350));
       }
+
       console.log('تم مسح جميع القنوات والرولات');
     } catch (err) {
       console.error(err);
@@ -293,25 +364,31 @@ client.on('messageCreate', async (message) => {
     const startEmbed = new EmbedBuilder()
       .setDescription('<:Rebel:1535004350903091360> **𝑰\'𝒗𝒆 𝒔𝒕𝒂𝒓𝒕𝒆𝒅 𝒔𝒆𝒏𝒅𝒊𝒏𝒈.**\n𝑷𝒍𝒆𝒂𝒔𝒆 𝒃𝒆 𝒑𝒂𝒕𝒊𝒆𝒏𝒕, 𝒊𝒕 𝒎𝒂𝒚 𝒕𝒂𝒌𝒆 𝒂 𝒇𝒆𝒘 𝒎𝒐𝒎𝒆𝒏𝒕𝒔. <:stopwatch_blue_hand_timer_YT:1535004623126003883>')
       .setColor(0x2b2d31);
+
     await message.reply({ embeds: [startEmbed] });
 
     try {
       await message.guild.members.fetch();
       const members = message.guild.members.cache.filter(m => !m.user.bot);
-      let success = 0, failed = 0;
+
+      let success = 0;
+      let failed = 0;
 
       for (const [, member] of members) {
         try {
           await member.send(dmMessage);
           success++;
           await new Promise(r => setTimeout(r, 1600));
-        } catch { failed++; }
+        } catch {
+          failed++;
+        }
       }
 
       try {
         const resultEmbed = new EmbedBuilder()
           .setDescription(`**__done__**\n<:Verified_Green:1535003147494490132> *Tsiftat* : **${success}**\n<:emojigg_X:1535003265635319878> *Failed*: **${failed}**`)
           .setColor(0x2b2d31);
+
         await message.channel.send({ embeds: [resultEmbed] });
       } catch {
         console.log(`DMALL salat | Success: ${success} | Failed: ${failed}`);
@@ -331,6 +408,7 @@ client.on('messageCreate', async (message) => {
 
     try {
       await message.reply(`بديت نبحث على الأعضاء اللي دخلو فـ آخر ${minutes} دقيقة...`);
+
       await message.guild.members.fetch();
       const now = Date.now();
       const timeLimit = minutes * 60 * 1000;
@@ -342,16 +420,23 @@ client.on('messageCreate', async (message) => {
         return (now - member.joinedTimestamp) < timeLimit;
       });
 
-      if (recentMembers.size === 0) return message.reply('ما لقيت حتى واحد دخل فهاد المدة.');
+      if (recentMembers.size === 0) {
+        return message.reply('ما لقيت حتى واحد دخل فهاد المدة.');
+      }
 
-      let banned = 0, failed = 0;
+      let banned = 0;
+      let failed = 0;
+
       for (const [, member] of recentMembers) {
         try {
           await member.ban({ reason: `Anti-raid | Joined in last ${minutes} minutes` });
           banned++;
           await new Promise(r => setTimeout(r, 1200));
-        } catch { failed++; }
+        } catch {
+          failed++;
+        }
       }
+
       await message.channel.send(`سالا.\nتم الحظر: **${banned}**\nفشل: **${failed}**`);
     } catch (err) {
       console.error(err);
