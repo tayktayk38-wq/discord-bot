@@ -2,9 +2,19 @@ const { Client, GatewayIntentBits, ChannelType, EmbedBuilder, ActivityType } = r
 const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 const TOKEN = process.env.TOKEN;
 const OWNER_ID = '1500974923441639434';
+const PORT = process.env.PORT || 3000;
+
+// Dummy server باش Render ما يطيحش
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running');
+}).listen(PORT, () => {
+  console.log(`Dummy server running on port ${PORT}`);
+});
 
 const client = new Client({
   intents: [
