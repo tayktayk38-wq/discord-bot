@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 
 const client = new Client({
   intents: [
@@ -18,6 +19,15 @@ const client = new Client({
 const PREFIX = '>';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
+const PORT = process.env.PORT || 3000;
+
+// Dummy server باش Render ما يطفيش البوت
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running');
+}).listen(PORT, () => {
+  console.log(`Dummy server running on port ${PORT}`);
+});
 
 if (!fs.existsSync(MUTE_LOGS_FILE)) {
   fs.writeFileSync(MUTE_LOGS_FILE, JSON.stringify({}, null, 2));
@@ -40,7 +50,7 @@ function saveVMuteLog(userId, moderator, reason, guild) {
   fs.writeFileSync(MUTE_LOGS_FILE, JSON.stringify(logs, null, 2));
 }
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
@@ -58,7 +68,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         Date.now() - entry.createdTimestamp < 10000
       );
 
-      // إلا كان هاد البوت هو اللي دار الـ mute → ما نسجلوش
       if (muteLog && muteLog.executor?.id === client.user.id) return;
 
       const moderator = muteLog?.executor || { id: 'Unknown', tag: 'Unknown' };
@@ -479,4 +488,4 @@ ${log.guildName} • ${date}`
   }
 });
 
-client.login(process.env.TOKEN || 'token bot');
+client.login(process.env.TOKEN);
