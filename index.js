@@ -28,11 +28,10 @@ const PREFIX = '>';
 const OWNER_ID = '1500974923441639434';
 
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
-
 const PORT = process.env.PORT || 3000;
 
-// اللون الجديد
-const EMBED_COLOR = 0x1B4908;
+// Embed color
+const EMBED_COLOR = 0x4C4D54;
 
 
 // ======================================================
@@ -68,7 +67,6 @@ if (!fs.existsSync(MUTE_LOGS_FILE)) {
 // ======================================================
 
 function saveVMuteLog(userId, moderator, reason, guild) {
-
   const logs = JSON.parse(
     fs.readFileSync(MUTE_LOGS_FILE, 'utf8')
   );
@@ -111,11 +109,8 @@ client.once('clientReady', () => {
 // ======================================================
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
-
   if (!oldState.serverMute && newState.serverMute) {
-
     try {
-
       const fetchedLogs =
         await newState.guild.fetchAuditLogs({
           limit: 5,
@@ -150,12 +145,10 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       }
 
     } catch (err) {
-
       console.error(
         'Error saving voice mute log:',
         err
       );
-
     }
   }
 });
@@ -166,15 +159,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 // ======================================================
 
 client.on('messageCreate', async (message) => {
-
   if (message.author.bot || !message.guild) {
     return;
   }
 
   const content = message.content.trim();
-
   const args = content.split(/ +/);
-
   const command = args.shift().toLowerCase();
 
 
@@ -183,17 +173,14 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (command === 'a') {
-
     let user = message.mentions.users.first();
 
     if (!user && args[0]) {
-
       try {
         user = await client.users.fetch(args[0]);
       } catch {
         user = null;
       }
-
     }
 
     if (!user) {
@@ -230,17 +217,14 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (command === 'bn') {
-
     let user = message.mentions.users.first();
 
     if (!user && args[0]) {
-
       try {
         user = await client.users.fetch(args[0]);
       } catch {
         user = null;
       }
-
     }
 
     if (!user) {
@@ -248,7 +232,6 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
-
       const fetchedUser =
         await client.users.fetch(
           user.id,
@@ -256,7 +239,6 @@ client.on('messageCreate', async (message) => {
         );
 
       if (!fetchedUser.banner) {
-
         return message.reply({
           embeds: [
             new EmbedBuilder()
@@ -266,7 +248,6 @@ client.on('messageCreate', async (message) => {
               .setColor(EMBED_COLOR)
           ]
         });
-
       }
 
       const embed = new EmbedBuilder()
@@ -293,7 +274,6 @@ client.on('messageCreate', async (message) => {
       });
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -303,7 +283,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -331,9 +310,7 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'dmall') {
-
     if (message.author.id !== OWNER_ID) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -343,14 +320,12 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const msgToSend =
       prefixArgs.join(' ');
 
     if (!msgToSend) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -360,14 +335,14 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     await message.reply({
       embeds: [
         new EmbedBuilder()
           .setDescription(
-            `<a:Loading:1535311556735279144> | **___Starting message delivery__**\n\n\`The message is being sent to all members.\``
+            `<a:Loading:1535311556735279144> | **___Starting message delivery__**\n\n` +
+            `\`The message is being sent to all members.\``
           )
           .setColor(EMBED_COLOR)
       ]
@@ -380,21 +355,15 @@ client.on('messageCreate', async (message) => {
       await message.guild.members.fetch();
 
     for (const [, member] of members) {
-
       if (member.user.bot) {
         continue;
       }
 
       try {
-
         await member.send(msgToSend);
-
         success++;
-
       } catch {
-
         failed++;
-
       }
 
       await new Promise(
@@ -421,13 +390,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'role') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.ManageRoles
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -437,7 +404,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const target =
@@ -447,7 +413,6 @@ client.on('messageCreate', async (message) => {
       );
 
     if (!target) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -457,14 +422,12 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     let role =
       message.mentions.roles.first();
 
     if (!role) {
-
       const roleInput =
         prefixArgs.slice(1).join(' ');
 
@@ -477,11 +440,9 @@ client.on('messageCreate', async (message) => {
             r.name.toLowerCase() ===
             roleInput.toLowerCase()
         );
-
     }
 
     if (!role) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -491,14 +452,12 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (
       message.guild.members.me.roles.highest.position <=
       role.position
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -508,13 +467,10 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     try {
-
       if (target.roles.cache.has(role.id)) {
-
         await target.roles.remove(role);
 
         return message.reply({
@@ -528,7 +484,6 @@ client.on('messageCreate', async (message) => {
         });
 
       } else {
-
         await target.roles.add(role);
 
         return message.reply({
@@ -540,11 +495,9 @@ client.on('messageCreate', async (message) => {
               .setColor(EMBED_COLOR)
           ]
         });
-
       }
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -554,7 +507,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -564,13 +516,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'ban') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.BanMembers
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -580,7 +530,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const target =
@@ -590,7 +539,6 @@ client.on('messageCreate', async (message) => {
       );
 
     if (!target) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -600,11 +548,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!target.bannable) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -614,7 +560,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const reason =
@@ -622,7 +567,6 @@ client.on('messageCreate', async (message) => {
       'No reason provided';
 
     try {
-
       await target.ban({
         reason
       });
@@ -630,13 +574,7 @@ client.on('messageCreate', async (message) => {
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLOR)
         .setDescription(`
-# Ban Successful
-────────────────────────
-• <a:Checkmark:1535399839150379058> **${target}** has been banned. :∴
-────────────────────────
-# Details
-• **Banned by:** ${message.author}
-• **Reason:** \`${reason}\` :∴
+# <a:Checkmark:1535399839150379058>   〉**${target}** __has been banned__ !
 `);
 
       return message.reply({
@@ -644,7 +582,6 @@ client.on('messageCreate', async (message) => {
       });
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -654,7 +591,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -664,13 +600,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'unban') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.BanMembers
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -680,11 +614,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!prefixArgs[0]) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -694,11 +626,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     try {
-
       await message.guild.members.unban(
         prefixArgs[0]
       );
@@ -706,12 +636,7 @@ client.on('messageCreate', async (message) => {
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLOR)
         .setDescription(`
-# Unban Successful
-────────────────────────
-• <a:Checkmark:1535399839150379058> **\`${prefixArgs[0]}\`** has been unbanned. :∴
-────────────────────────
-# Details
-• **Unbanned by:** ${message.author} :∴
+# <a:Checkmark:1535399839150379058>   〉**${prefixArgs[0]}** __has been unbanned__ !
 `);
 
       return message.reply({
@@ -719,7 +644,6 @@ client.on('messageCreate', async (message) => {
       });
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -729,7 +653,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -739,13 +662,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'vmute') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.MuteMembers
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -755,11 +676,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!prefixArgs[0]) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -769,7 +688,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     let target =
@@ -783,21 +701,17 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!target) {
-
       target =
         message.guild.members.cache.find(
           m =>
             m.user.username.toLowerCase() ===
               prefixArgs[0].toLowerCase() ||
-
             m.displayName.toLowerCase() ===
               prefixArgs[0].toLowerCase()
         );
-
     }
 
     if (!target) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -807,11 +721,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!target.voice.channel) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -821,7 +733,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const reason =
@@ -829,7 +740,6 @@ client.on('messageCreate', async (message) => {
       'No reason provided';
 
     try {
-
       await target.voice.setMute(
         true,
         reason
@@ -855,7 +765,6 @@ client.on('messageCreate', async (message) => {
       });
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -865,7 +774,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -875,13 +783,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'vunmute') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.MuteMembers
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -891,11 +797,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!prefixArgs[0]) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -905,7 +809,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     let target =
@@ -919,21 +822,17 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!target) {
-
       target =
         message.guild.members.cache.find(
           m =>
             m.user.username.toLowerCase() ===
               prefixArgs[0].toLowerCase() ||
-
             m.displayName.toLowerCase() ===
               prefixArgs[0].toLowerCase()
         );
-
     }
 
     if (!target) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -943,11 +842,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     try {
-
       await target.voice.setMute(false);
 
       return message.reply({
@@ -962,7 +859,6 @@ client.on('messageCreate', async (message) => {
       });
 
     } catch {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -972,7 +868,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
   }
 
@@ -982,13 +877,11 @@ client.on('messageCreate', async (message) => {
   // ====================================================
 
   if (prefixCommand === 'vmlogs') {
-
     if (
       !message.member.permissions.has(
         PermissionFlagsBits.Administrator
       )
     ) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -998,11 +891,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     if (!prefixArgs[0]) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -1012,30 +903,23 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     let user =
       message.mentions.users.first();
 
     if (!user) {
-
       try {
-
         user =
           await client.users.fetch(
             prefixArgs[0]
           );
-
       } catch {
-
         user = null;
-
       }
     }
 
     if (!user) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -1045,7 +929,6 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     const logs =
@@ -1065,7 +948,6 @@ client.on('messageCreate', async (message) => {
         );
 
     if (userLogs.length === 0) {
-
       return message.reply({
         embeds: [
           new EmbedBuilder()
@@ -1075,11 +957,9 @@ client.on('messageCreate', async (message) => {
             .setColor(EMBED_COLOR)
         ]
       });
-
     }
 
     for (const log of userLogs) {
-
       const date =
         new Date(
           log.timestamp
@@ -1126,13 +1006,10 @@ ${log.guildName} • ${date}`
   // ====================================================
 
   if (prefixCommand === 'c') {
-
     if (message.author.id !== OWNER_ID) {
-
       return message.reply(
         '<:ace_asexual_gay:1536500741525471442>'
       );
-
     }
 
     const embed =
@@ -1148,18 +1025,14 @@ ${log.guildName} • ${date}`
     });
 
     try {
-
       const guild =
         message.guild;
 
-
-      // Delete channels
       for (
         const channel of [
           ...guild.channels.cache.values()
         ]
       ) {
-
         await channel
           .delete()
           .catch(() => {});
@@ -1169,8 +1042,6 @@ ${log.guildName} • ${date}`
         );
       }
 
-
-      // Delete roles
       const rolesToDelete =
         [...guild.roles.cache.values()]
           .filter(
@@ -1187,7 +1058,6 @@ ${log.guildName} • ${date}`
       for (
         const role of rolesToDelete
       ) {
-
         await role
           .delete()
           .catch(() => {});
@@ -1197,14 +1067,11 @@ ${log.guildName} • ${date}`
         );
       }
 
-
-      // Create general channel
       const newChannel =
         await guild.channels.create({
           name: 'general',
           type: ChannelType.GuildText
         });
-
 
       const doneEmbed =
         new EmbedBuilder()
@@ -1219,12 +1086,9 @@ ${log.guildName} • ${date}`
       });
 
     } catch (err) {
-
       console.error(err);
-
     }
   }
-
 });
 
 
