@@ -16,7 +16,7 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-const PREFIX = '>';
+const PREFIX = '-';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
@@ -171,7 +171,7 @@ client.on('messageCreate', async (message) => {
 
     const target = message.mentions.members.first() || message.guild.members.cache.get(prefixArgs[0]);
     if (!target) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>role @user @role / role name / role id`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-role @user @role / role name / role id`').setColor(EMBED_COLOR)] });
     }
 
     let role = message.mentions.roles.first();
@@ -205,7 +205,18 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>ban @user/ID [reason]`').setColor(EMBED_COLOR)] });
+      const embed = new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(`
+# Command
+────────────────
+Ban a member from the server
+────────────────
+# Usage
+────────────────
+\`-ban <ID|@member|username> [reason]\`
+`);
+      return message.reply({ embeds: [embed] });
     }
 
     const reason = prefixArgs.slice(1).join(' ') || 'No reason provided';
@@ -225,7 +236,6 @@ client.on('messageCreate', async (message) => {
 
         return message.reply({ embeds: [embed] });
       } else {
-        // Ban by ID (even if not in the server)
         await message.guild.members.ban(prefixArgs[0], { reason });
 
         let user = null;
@@ -253,7 +263,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>unban <ID>`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-unban <ID>`').setColor(EMBED_COLOR)] });
     }
 
     try {
@@ -283,7 +293,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vmute <ID|@member|username> [reason]`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-vmute <ID|@member|username> [reason]`').setColor(EMBED_COLOR)] });
     }
 
     let target = message.mentions.members.first();
@@ -322,7 +332,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vunmute <ID|@member|username>`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-vunmute <ID|@member|username>`').setColor(EMBED_COLOR)] });
     }
 
     let target = message.mentions.members.first();
@@ -353,7 +363,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vmlogs <ID|@user>`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-vmlogs <ID|@user>`').setColor(EMBED_COLOR)] });
     }
 
     let user = message.mentions.users.first();
