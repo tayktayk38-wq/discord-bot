@@ -20,7 +20,7 @@ const PREFIX = '>';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
-const EMBED_COLOR = 0x7B6DFF;
+const EMBED_COLOR = 0x4C4D54;
 
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -239,10 +239,17 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
+      let user = null;
+      try {
+        user = await client.users.fetch(prefixArgs[0]);
+      } catch {}
+
       await message.guild.members.unban(prefixArgs[0]);
 
+      const displayName = user ? `**${user.tag}**` : `\`${prefixArgs[0]}\``;
+
       const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> **〉** \`${prefixArgs[0]}\` **__has been unbanned__** !`)
+        .setDescription(`<a:Checkmark:1535399839150379058> **〉** ${displayName} **__has been unbanned__** !`)
         .setColor(EMBED_COLOR);
 
       return message.reply({ embeds: [embed] });
