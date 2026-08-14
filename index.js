@@ -205,18 +205,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!prefixArgs[0]) {
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLOR)
-        .setDescription(`
-**Command**
-• Ban a member from the server :∴
-
-**Usage**
-• \`-ban <ID|@member|username> [reason]\` :∴
-• Cooldown: 30 seconds :∴
-• Server limit: disabled :∴
-`);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-ban <ID|@member|username> [reason]`').setColor(EMBED_COLOR)] });
     }
 
     const reason = prefixArgs.slice(1).join(' ') || 'No reason provided';
