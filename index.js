@@ -20,9 +20,8 @@ const PREFIX = '>';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
-const EMBED_COLOR = 0x1b4332; // اللون الأخضر الغامق
+const EMBED_COLOR = 0x7B6DFF;
 
-// Dummy server
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Bot is running');
@@ -55,7 +54,6 @@ client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-// ========== VOICE STATE UPDATE ==========
 client.on('voiceStateUpdate', async (oldState, newState) => {
   if (!oldState.serverMute && newState.serverMute) {
     try {
@@ -93,15 +91,9 @@ client.on('messageCreate', async (message) => {
   // ========== AVATAR ==========
   if (command === 'a') {
     let user = message.mentions.users.first();
-
     if (!user && args[0]) {
-      try {
-        user = await client.users.fetch(args[0]);
-      } catch {
-        user = null;
-      }
+      try { user = await client.users.fetch(args[0]); } catch { user = null; }
     }
-
     if (!user) user = message.author;
 
     const embed = new EmbedBuilder()
@@ -117,25 +109,15 @@ client.on('messageCreate', async (message) => {
   // ========== BANNER ==========
   if (command === 'bn') {
     let user = message.mentions.users.first();
-
     if (!user && args[0]) {
-      try {
-        user = await client.users.fetch(args[0]);
-      } catch {
-        user = null;
-      }
+      try { user = await client.users.fetch(args[0]); } catch { user = null; }
     }
-
     if (!user) user = message.author;
 
     try {
       const fetchedUser = await client.users.fetch(user.id, { force: true });
-
       if (!fetchedUser.banner) {
-        const embed = new EmbedBuilder()
-          .setDescription(`<:pentacle_asexual:1536545946077495397> | **__This user doesn't have a banner__**`)
-          .setColor(EMBED_COLOR);
-        return message.reply({ embeds: [embed] });
+        return message.reply({ embeds: [new EmbedBuilder().setDescription(`<:pentacle_asexual:1536545946077495397> | **__This user doesn't have a banner__**`).setColor(EMBED_COLOR)] });
       }
 
       const embed = new EmbedBuilder()
@@ -146,15 +128,11 @@ client.on('messageCreate', async (message) => {
         .setFooter({ text: `Requested by ${message.author.tag}` });
 
       return message.reply({ embeds: [embed] });
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription(`<:pentacle_asexual:1536545946077495397> | **__Failed to fetch banner__**`)
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription(`<:pentacle_asexual:1536545946077495397> | **__Failed to fetch banner__**`).setColor(EMBED_COLOR)] });
     }
   }
 
-  // ========== PREFIX COMMANDS ==========
   if (!content.startsWith(PREFIX)) return;
 
   const prefixArgs = content.slice(PREFIX.length).trim().split(/ +/);
@@ -163,135 +141,76 @@ client.on('messageCreate', async (message) => {
   // ========== DMALL ==========
   if (prefixCommand === 'dmall') {
     if (message.author.id !== OWNER_ID) {
-      const embed = new EmbedBuilder()
-        .setDescription('<:OwnerCrown:1536485446018662543> | **__This command is restricted to the bot owner__**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('<:OwnerCrown:1536485446018662543> | **__This command is restricted to the bot owner__**').setColor(EMBED_COLOR)] });
     }
 
     const msgToSend = prefixArgs.join(' ');
     if (!msgToSend) {
-      const embed = new EmbedBuilder()
-        .setDescription('<:message:1536486534734151741> | **__Please enter the message you\'d like to send__**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('<:message:1536486534734151741> | **__Please enter the message you\'d like to send__**').setColor(EMBED_COLOR)] });
     }
 
-    const embedStart = new EmbedBuilder()
-      .setDescription(`<a:Loading:1535311556735279144> | **___Starting message delivery__**\n\n                   \`The message is being sent to all members.\``)
-      .setColor(EMBED_COLOR);
-    await message.reply({ embeds: [embedStart] });
+    await message.reply({ embeds: [new EmbedBuilder().setDescription(`<a:Loading:1535311556735279144> | **___Starting message delivery__**\n\n\`The message is being sent to all members.\``).setColor(EMBED_COLOR)] });
 
-    let success = 0;
-    let failed = 0;
-
+    let success = 0, failed = 0;
     const members = await message.guild.members.fetch();
 
     for (const [, member] of members) {
       if (member.user.bot) continue;
-
-      try {
-        await member.send(msgToSend);
-        success++;
-      } catch {
-        failed++;
-      }
-
+      try { await member.send(msgToSend); success++; } catch { failed++; }
       await new Promise(r => setTimeout(r, 700));
     }
 
-    const embedDone = new EmbedBuilder()
-      .setDescription(`**__Delivery Report__**\n\n<a:Checkmark:1535399839150379058> | **Delivered** : \`${success}\`\n\n<:emojigg_X:1535805640734154782> | **Failed** : \`${failed}\``)
-      .setColor(EMBED_COLOR);
-
-    return message.channel.send({ embeds: [embedDone] });
+    return message.channel.send({ embeds: [new EmbedBuilder().setDescription(`**__Delivery Report__**\n\n<a:Checkmark:1535399839150379058> | **Delivered** : \`${success}\`\n\n<:emojigg_X:1535805640734154782> | **Failed** : \`${failed}\``).setColor(EMBED_COLOR)] });
   }
 
   // ========== ROLE ==========
   if (prefixCommand === 'role') {
     if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Manage Roles` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Manage Roles` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     const target = message.mentions.members.first() || message.guild.members.cache.get(prefixArgs[0]);
     if (!target) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>role @user @role / role name / role id`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>role @user @role / role name / role id`').setColor(EMBED_COLOR)] });
     }
 
     let role = message.mentions.roles.first();
-
     if (!role) {
       const roleInput = prefixArgs.slice(1).join(' ');
-      role = message.guild.roles.cache.get(roleInput);
-      if (!role) {
-        role = message.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase());
-      }
+      role = message.guild.roles.cache.get(roleInput) || message.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase());
     }
 
-    if (!role) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Role not found.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
-    }
-
+    if (!role) return message.reply({ embeds: [new EmbedBuilder().setDescription('**Role not found.**').setColor(EMBED_COLOR)] });
     if (message.guild.members.me.roles.highest.position <= role.position) {
-      const embed = new EmbedBuilder()
-        .setDescription('**I cannot manage this role because it is higher or equal to my highest role.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**I cannot manage this role because it is higher or equal to my highest role.**').setColor(EMBED_COLOR)] });
     }
 
     try {
       if (target.roles.cache.has(role.id)) {
         await target.roles.remove(role);
-        const embed = new EmbedBuilder()
-          .setDescription(`<:Spotify_Remove:1536495431213776948> 〉Removed ${role} from ${target}`)
-          .setColor(EMBED_COLOR);
-        return message.reply({ embeds: [embed] });
+        return message.reply({ embeds: [new EmbedBuilder().setDescription(`<:Spotify_Remove:1536495431213776948> 〉Removed ${role} from ${target}`).setColor(EMBED_COLOR)] });
       } else {
         await target.roles.add(role);
-        const embed = new EmbedBuilder()
-          .setDescription(`<:PlusLogo:1536495735141302343> 〉Added ${role} to ${target}`)
-          .setColor(EMBED_COLOR);
-        return message.reply({ embeds: [embed] });
+        return message.reply({ embeds: [new EmbedBuilder().setDescription(`<:PlusLogo:1536495735141302343> 〉Added ${role} to ${target}`).setColor(EMBED_COLOR)] });
       }
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Failed to update the role.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to update the role.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== BAN ==========
   if (prefixCommand === 'ban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Ban Members` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Ban Members` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     const target = message.mentions.members.first() || message.guild.members.cache.get(prefixArgs[0]);
     if (!target) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>ban @user [reason]`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>ban @user [reason]`').setColor(EMBED_COLOR)] });
     }
 
     if (!target.bannable) {
-      const embed = new EmbedBuilder()
-        .setDescription('**I cannot ban this user.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**I cannot ban this user.**').setColor(EMBED_COLOR)] });
     }
 
     const reason = prefixArgs.slice(1).join(' ') || 'No reason provided';
@@ -300,64 +219,61 @@ client.on('messageCreate', async (message) => {
       await target.ban({ reason });
 
       const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> | **__Banned__** ${target.user.tag}\n\n**__Reason__** : \`${reason}\`\n\n**__Banned by__** : ${message.author}`)
-        .setColor(EMBED_COLOR);
+        .setColor(EMBED_COLOR)
+        .setDescription(`
+# Ban Successful
+────────────────────────
+• <a:Checkmark:1535399839150379058> **${target}** has been banned. :∴
+────────────────────────
+# Details
+• **Banned by:** ${message.author}
+• **Reason:** \`${reason}\` :∴
+`);
 
       return message.reply({ embeds: [embed] });
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Failed to ban this user.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to ban this user.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== UNBAN ==========
   if (prefixCommand === 'unban') {
     if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Ban Members` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Ban Members` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     if (!prefixArgs[0]) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>unban <ID>`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>unban <ID>`').setColor(EMBED_COLOR)] });
     }
 
     try {
       await message.guild.members.unban(prefixArgs[0]);
 
       const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> | **__Unbanned__** \`${prefixArgs[0]}\`\n\n**__Unbanned by__** : ${message.author}`)
-        .setColor(EMBED_COLOR);
+        .setColor(EMBED_COLOR)
+        .setDescription(`
+# Unban Successful
+────────────────────────
+• <a:Checkmark:1535399839150379058> **\`${prefixArgs[0]}\`** has been unbanned. :∴
+────────────────────────
+# Details
+• **Unbanned by:** ${message.author} :∴
+`);
 
       return message.reply({ embeds: [embed] });
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Failed to unban this user. Check the ID.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to unban this user. Check the ID.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== VOICE MUTE ==========
   if (prefixCommand === 'vmute') {
     if (!message.member.permissions.has(PermissionFlagsBits.MuteMembers)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Mute Members` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Mute Members` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     if (!prefixArgs[0]) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>vmute <ID|@member|username> [reason]`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vmute <ID|@member|username> [reason]`').setColor(EMBED_COLOR)] });
     }
 
     let target = message.mentions.members.first();
@@ -370,17 +286,11 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!target) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Member not found.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Member not found.**').setColor(EMBED_COLOR)] });
     }
 
     if (!target.voice.channel) {
-      const embed = new EmbedBuilder()
-        .setDescription('**This user is not in a voice channel.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**This user is not in a voice channel.**').setColor(EMBED_COLOR)] });
     }
 
     const reason = prefixArgs.slice(1).join(' ') || 'No reason provided';
@@ -389,33 +299,20 @@ client.on('messageCreate', async (message) => {
       await target.voice.setMute(true, reason);
       saveVMuteLog(target.id, message.author, reason, message.guild);
 
-      const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> | **__Voice muted__** ${target}\n\n**__Reason__** : \`${reason}\`\n\n**__Muted by__** : ${message.author}`)
-        .setColor(EMBED_COLOR);
-
-      return message.reply({ embeds: [embed] });
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Failed to voice mute this user.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription(`<a:Checkmark:1535399839150379058> | **__Voice muted__** ${target}\n\n**__Reason__** : \`${reason}\`\n\n**__Muted by__** : ${message.author}`).setColor(EMBED_COLOR)] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to voice mute this user.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== VOICE UNMUTE ==========
   if (prefixCommand === 'vunmute') {
     if (!message.member.permissions.has(PermissionFlagsBits.MuteMembers)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Mute Members` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Mute Members` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     if (!prefixArgs[0]) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>vunmute <ID|@member|username>`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vunmute <ID|@member|username>`').setColor(EMBED_COLOR)] });
     }
 
     let target = message.mentions.members.first();
@@ -428,68 +325,41 @@ client.on('messageCreate', async (message) => {
     }
 
     if (!target) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Member not found.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Member not found.**').setColor(EMBED_COLOR)] });
     }
 
     try {
       await target.voice.setMute(false);
-
-      const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> | **__Voice unmuted__** ${target}\n\n**__Unmuted by__** : ${message.author}`)
-        .setColor(EMBED_COLOR);
-
-      return message.reply({ embeds: [embed] });
-    } catch (err) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Failed to voice unmute this user.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription(`<a:Checkmark:1535399839150379058> | **__Voice unmuted__** ${target}\n\n**__Unmuted by__** : ${message.author}`).setColor(EMBED_COLOR)] });
+    } catch {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to voice unmute this user.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== VOICE MUTE LOGS ==========
   if (prefixCommand === 'vmlogs') {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      const embed = new EmbedBuilder()
-        .setDescription('**You need the `Administrator` permission to use this command.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Administrator` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
     if (!prefixArgs[0]) {
-      const embed = new EmbedBuilder()
-        .setDescription('**Usage:** `>vmlogs <ID|@user>`')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>vmlogs <ID|@user>`').setColor(EMBED_COLOR)] });
     }
 
     let user = message.mentions.users.first();
     if (!user) {
-      try {
-        user = await client.users.fetch(prefixArgs[0]);
-      } catch {
-        user = null;
-      }
+      try { user = await client.users.fetch(prefixArgs[0]); } catch { user = null; }
     }
 
     if (!user) {
-      const embed = new EmbedBuilder()
-        .setDescription('**User not found.**')
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**User not found.**').setColor(EMBED_COLOR)] });
     }
 
     const logs = JSON.parse(fs.readFileSync(MUTE_LOGS_FILE, 'utf8'));
     const userLogs = (logs[user.id] || []).filter(log => log.guildId === message.guild.id);
 
     if (userLogs.length === 0) {
-      const embed = new EmbedBuilder()
-        .setDescription(`<:pentacle_asexual:1536545946077495397> | **__No voice mute logs found for this user in this server__**`)
-        .setColor(EMBED_COLOR);
-      return message.reply({ embeds: [embed] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription(`<:pentacle_asexual:1536545946077495397> | **__No voice mute logs found for this user in this server__**`).setColor(EMBED_COLOR)] });
     }
 
     for (const log of userLogs) {
