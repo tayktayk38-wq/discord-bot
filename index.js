@@ -208,13 +208,13 @@ client.on('messageCreate', async (message) => {
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLOR)
         .setDescription(`
-# Command
-────────────────
-Ban a member from the server
-────────────────
-# Usage
-────────────────
-\`-ban <ID|@member|username> [reason]\`
+**Command**
+• Ban a member from the server :∴
+
+**Usage**
+• \`-ban <ID|@member|username> [reason]\` :∴
+• Cooldown: 30 seconds :∴
+• Server limit: disabled :∴
 `);
       return message.reply({ embeds: [embed] });
     }
