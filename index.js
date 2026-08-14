@@ -204,27 +204,45 @@ client.on('messageCreate', async (message) => {
       return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need the `Ban Members` permission to use this command.**').setColor(EMBED_COLOR)] });
     }
 
-    const target = message.mentions.members.first() || message.guild.members.cache.get(prefixArgs[0]);
-    if (!target) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>ban @user [reason]`').setColor(EMBED_COLOR)] });
-    }
-
-    if (!target.bannable) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**I cannot ban this user.**').setColor(EMBED_COLOR)] });
+    if (!prefixArgs[0]) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `>ban @user/ID [reason]`').setColor(EMBED_COLOR)] });
     }
 
     const reason = prefixArgs.slice(1).join(' ') || 'No reason provided';
+    let target = message.mentions.members.first() || message.guild.members.cache.get(prefixArgs[0]);
 
     try {
-      await target.ban({ reason });
+      if (target) {
+        if (!target.bannable) {
+          return message.reply({ embeds: [new EmbedBuilder().setDescription('**I cannot ban this user.**').setColor(EMBED_COLOR)] });
+        }
 
-      const embed = new EmbedBuilder()
-        .setDescription(`<a:Checkmark:1535399839150379058> **〉** ${target} **__has been banned__** !`)
-        .setColor(EMBED_COLOR);
+        await target.ban({ reason });
 
-      return message.reply({ embeds: [embed] });
+        const embed = new EmbedBuilder()
+          .setDescription(`<a:Checkmark:1535399839150379058> **〉** ${target} **__has been banned__** !`)
+          .setColor(EMBED_COLOR);
+
+        return message.reply({ embeds: [embed] });
+      } else {
+        // Ban by ID (even if not in the server)
+        await message.guild.members.ban(prefixArgs[0], { reason });
+
+        let user = null;
+        try {
+          user = await client.users.fetch(prefixArgs[0]);
+        } catch {}
+
+        const displayName = user ? `**${user.tag}**` : `\`${prefixArgs[0]}\``;
+
+        const embed = new EmbedBuilder()
+          .setDescription(`<a:Checkmark:1535399839150379058> **〉** ${displayName} **__has been banned__** !`)
+          .setColor(EMBED_COLOR);
+
+        return message.reply({ embeds: [embed] });
+      }
     } catch {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to ban this user.**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to ban this user. Check the ID or permissions.**').setColor(EMBED_COLOR)] });
     }
   }
 
