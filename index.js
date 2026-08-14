@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType, OverwriteType } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -21,6 +21,33 @@ const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
 const EMBED_COLOR = 0x4C4D54;
+
+// ========== TASK SYSTEM ==========
+const STAFF_ROLE_IDS = [
+  '1532366478546964510',
+  '1532366479457128708',
+  '1532366481180856350'
+];
+const CLAIM_CHANNEL_ID = '1533090031961374780';
+const TASK_LOG_CHANNEL_ID = '1537760271458902076';
+const TASK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+const taskSessions = new Map(); // userId -> session data
+
+function isStaff(member) {
+  if (!member) return false;
+  return STAFF_ROLE_IDS.some(id => member.roles.cache.has(id));
+}
+
+function isNormalMember(member) {
+  if (!member || member.user.bot) return false;
+  return !isStaff(member);
+}
+
+function countNormalMembers(channel) {
+  if (!channel || !channel.members) return 0;
+  return channel.members.filter(m => isNormalMember(m)).size;
+}
 
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -54,7 +81,9 @@ client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
+// ========== VOICE STATE (Mute logs + Task tracking) ==========
 client.on('voiceStateUpdate', async (oldState, newState) => {
+  // --- Mute logs (اللي كان قبل) ---
   if (!oldState.serverMute && newState.serverMute) {
     try {
       const fetchedLogs = await newState.guild.fetchAuditLogs({
@@ -78,6 +107,38 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     } catch (err) {
       console.error('Error saving voice mute log:', err);
     }
+  }
+
+  // --- Task tracking ---
+  const member = newState.member || oldState.member;
+  if (!member || !isStaff(member)) return;
+
+  const session = taskSessions.get(member.id);
+  if (!session) return;
+
+  const channel = newState.channel || oldState.channel;
+  if (!channel || channel.id !== session.channelId) {
+    // خرج من القناة ديالو → نريسيطي العداد
+    session.validSince = null;
+    session.ready = false;
+    return;
+  }
+
+  const normals = countNormalMembers(channel);
+
+  if (normals >= 3) {
+    if (!session.validSince) {
+      session.validSince = Date.now();
+    }
+
+    const elapsed = Date.now() - session.validSince;
+    if (elapsed >= TASK_DURATION_MS) {
+      session.ready = true;
+    }
+  } else {
+    // ما بقاوش 3 أعضاء عاديين → نريسيطي
+    session.validSince = null;
+    session.ready = false;
   }
 });
 
@@ -137,6 +198,128 @@ client.on('messageCreate', async (message) => {
 
   const prefixArgs = content.slice(PREFIX.length).trim().split(/ +/);
   const prefixCommand = prefixArgs.shift().toLowerCase();
+
+  // ========== START TASK ==========
+  if (prefixCommand === 'starttask') {
+    if (!isStaff(message.member)) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للستاف.**').setColor(EMBED_COLOR)] });
+    }
+
+    if (taskSessions.has(message.author.id)) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**عندك بالفعل مهمة جارية. كمّل الـ 15 دقيقة أولاً.**').setColor(EMBED_COLOR)] });
+    }
+
+    try {
+      const tempChannel = await message.guild.channels.create({
+        name: `task-${message.author.username}`.slice(0, 100),
+        type: ChannelType.GuildVoice,
+        permissionOverwrites: [
+          {
+            id: message.guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          },
+          {
+            id: message.author.id,
+            allow: [
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.MoveMembers
+            ]
+          },
+          {
+            id: client.user.id,
+            allow: [
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.ManageChannels
+            ]
+          }
+        ]
+      });
+
+      taskSessions.set(message.author.id, {
+        channelId: tempChannel.id,
+        validSince: null,
+        ready: false,
+        createdAt: Date.now()
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(`<a:Checkmark:1535399839150379058> **〉** تم إنشاء قناتك: ${tempChannel}\n\nدخل فيها و جمع **3 أعضاء عاديين** و بقاو 15 دقيقة.`);
+
+      return message.reply({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش نصاوب القناة. تأكد من صلاحيات البوت.**').setColor(EMBED_COLOR)] });
+    }
+  }
+
+  // ========== TASK (Claim) ==========
+  if (prefixCommand === 'task') {
+    if (message.channel.id !== CLAIM_CHANNEL_ID) {
+      return; // يسكت إلا ما كانش فالقناة الصحيحة
+    }
+
+    if (!isStaff(message.member)) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للستاف.**').setColor(EMBED_COLOR)] });
+    }
+
+    const session = taskSessions.get(message.author.id);
+
+    if (!session) {
+      await message.react('❌');
+      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
+      if (logChannel) {
+        logChannel.send(`❌ **${message.author}** حاول يدير \`-task\` بلا ما يبدا المهمة (\`-starttask`).`);
+      }
+      return;
+    }
+
+    // تحديث أخير للحالة
+    const tempChannel = message.guild.channels.cache.get(session.channelId);
+    if (tempChannel) {
+      const normals = countNormalMembers(tempChannel);
+      if (normals >= 3 && session.validSince) {
+        const elapsed = Date.now() - session.validSince;
+        if (elapsed >= TASK_DURATION_MS) {
+          session.ready = true;
+        }
+      }
+    }
+
+    if (session.ready) {
+      await message.react('✅');
+      taskSessions.delete(message.author.id);
+
+      // مسح القناة المؤقتة
+      if (tempChannel) {
+        tempChannel.delete().catch(() => {});
+      }
+
+      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
+      if (logChannel) {
+        logChannel.send(`✅ **${message.author}** كمل المهمة بنجاح (15 دقيقة + 3 أعضاء عاديين).`);
+      }
+    } else {
+      await message.react('❌');
+
+      let reason = 'ما كملتش الشروط.';
+      if (!session.validSince) {
+        reason = 'ما جمعتيش 3 أعضاء عاديين فالقناة ديالك.';
+      } else {
+        const elapsedMin = Math.floor((Date.now() - session.validSince) / 60000);
+        reason = `الوقت اللي قضيتوه صحيح هو تقريباً ${elapsedMin} دقيقة من أصل 15.`;
+      }
+
+      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
+      if (logChannel) {
+        logChannel.send(`❌ **${message.author}** ما تحسبتش ليه المهمة.\n**السبب:** ${reason}`);
+      }
+    }
+  }
 
   // ========== DMALL ==========
   if (prefixCommand === 'dmall') {
