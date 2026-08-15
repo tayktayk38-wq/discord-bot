@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType } = require('discord.js');
-const { Player } = require('discord-player');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, getVoiceConnection } = require('@discordjs/voice');
+const play = require('play-dl');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -17,14 +18,14 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-const player = new Player(client);
-player.extractors.loadDefault();
-
 const PREFIX = '-';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
 const EMBED_COLOR = 0x4C4D54;
+
+// ========== MUSIC SYSTEM ==========
+const queues = new Map(); // guildId -> { songs: [], player, connection, textChannel }
 
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -54,33 +55,45 @@ function saveVMuteLog(userId, moderator, reason, guild) {
   fs.writeFileSync(MUTE_LOGS_FILE, JSON.stringify(logs, null, 2));
 }
 
+async function playSong(guildId) {
+  const queue = queues.get(guildId);
+  if (!queue || queue.songs.length === 0) {
+    if (queue?.connection) {
+      queue.connection.destroy();
+    }
+    queues.delete(guildId);
+    return;
+  }
+
+  const song = queue.songs[0];
+
+  try {
+    const stream = await play.stream(song.url);
+    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+
+    queue.player.play(resource);
+
+    queue.textChannel.send({
+      embeds: [new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(`<a:Checkmark:1535399839150379058> **〉** الآن كيشتغل: **${song.title}**`)]
+    }).catch(() => {});
+
+  } catch (err) {
+    console.error(err);
+    queue.textChannel.send({ embeds: [new EmbedBuilder().setDescription('**وقع خطأ أثناء تشغيل الأغنية.**').setColor(EMBED_COLOR)] }).catch(() => {});
+    queue.songs.shift();
+    playSong(guildId);
+  }
+}
+
 client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
 
   client.user.setPresence({
-    activities: [{
-      name: '/help',
-      type: 0
-    }],
+    activities: [{ name: '/help', type: 0 }],
     status: 'online'
   });
-});
-
-// ========== PLAYER EVENTS ==========
-player.events.on('playerStart', (queue, track) => {
-  queue.metadata.channel.send({
-    embeds: [new EmbedBuilder()
-      .setColor(EMBED_COLOR)
-      .setDescription(`<a:Checkmark:1535399839150379058> **〉** الآن كيشتغل: **${track.title}**`)]
-  }).catch(() => {});
-});
-
-player.events.on('error', (queue, error) => {
-  console.error('Player error:', error);
-});
-
-player.events.on('playerError', (queue, error) => {
-  console.error('Player error:', error);
 });
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
@@ -171,7 +184,7 @@ client.on('messageCreate', async (message) => {
   if (prefixCommand === 'play' || prefixCommand === 'p') {
     const query = prefixArgs.join(' ');
     if (!query) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-play <اسم الأغنية أو الرابط>`').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-play <اسم أو رابط>`').setColor(EMBED_COLOR)] });
     }
 
     const voiceChannel = message.member.voice.channel;
@@ -180,17 +193,63 @@ client.on('messageCreate', async (message) => {
     }
 
     try {
-      const { track } = await player.play(voiceChannel, query, {
-        nodeOptions: {
-          metadata: {
-            channel: message.channel
-          }
-        }
-      });
+      let songInfo;
 
-      return message.reply({ embeds: [new EmbedBuilder()
-        .setColor(EMBED_COLOR)
-        .setDescription(`<a:Checkmark:1535399839150379058> **〉** تمت الإضافة: **${track.title}**`)] });
+      if (play.yt_validate(query) === 'video') {
+        const info = await play.video_info(query);
+        songInfo = {
+          title: info.video_details.title,
+          url: info.video_details.url
+        };
+      } else {
+        const search = await play.search(query, { limit: 1 });
+        if (!search || search.length === 0) {
+          return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما لقيت حتى أغنية.**').setColor(EMBED_COLOR)] });
+        }
+        songInfo = {
+          title: search[0].title,
+          url: search[0].url
+        };
+      }
+
+      if (!queues.has(message.guild.id)) {
+        const connection = joinVoiceChannel({
+          channelId: voiceChannel.id,
+          guildId: message.guild.id,
+          adapterCreator: message.guild.voiceAdapterCreator
+        });
+
+        const audioPlayer = createAudioPlayer();
+
+        connection.subscribe(audioPlayer);
+
+        audioPlayer.on(AudioPlayerStatus.Idle, () => {
+          const q = queues.get(message.guild.id);
+          if (q) {
+            q.songs.shift();
+            playSong(message.guild.id);
+          }
+        });
+
+        queues.set(message.guild.id, {
+          songs: [],
+          player: audioPlayer,
+          connection,
+          textChannel: message.channel
+        });
+      }
+
+      const queue = queues.get(message.guild.id);
+      queue.songs.push(songInfo);
+
+      if (queue.songs.length === 1) {
+        playSong(message.guild.id);
+      } else {
+        message.reply({ embeds: [new EmbedBuilder()
+          .setColor(EMBED_COLOR)
+          .setDescription(`<a:Checkmark:1535399839150379058> **〉** تمت الإضافة للقائمة: **${songInfo.title}**`)] });
+      }
+
     } catch (err) {
       console.error(err);
       return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش نلعب هاد الأغنية.**').setColor(EMBED_COLOR)] });
@@ -199,69 +258,42 @@ client.on('messageCreate', async (message) => {
 
   // ========== MUSIC: SKIP ==========
   if (prefixCommand === 'skip') {
-    const queue = player.nodes.get(message.guild.id);
-    if (!queue || !queue.isPlaying()) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
+    const queue = queues.get(message.guild.id);
+    if (!queue || queue.songs.length === 0) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى.**').setColor(EMBED_COLOR)] });
     }
 
-    queue.node.skip();
+    queue.player.stop();
     return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم التخطي.').setColor(EMBED_COLOR)] });
   }
 
   // ========== MUSIC: STOP ==========
   if (prefixCommand === 'stop') {
-    const queue = player.nodes.get(message.guild.id);
-    if (!queue || !queue.isPlaying()) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
-    }
-
-    queue.delete();
-    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الإيقاف و مسح القائمة.').setColor(EMBED_COLOR)] });
-  }
-
-  // ========== MUSIC: PAUSE ==========
-  if (prefixCommand === 'pause') {
-    const queue = player.nodes.get(message.guild.id);
-    if (!queue || !queue.isPlaying()) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
-    }
-
-    queue.node.setPaused(true);
-    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الإيقاف المؤقت.').setColor(EMBED_COLOR)] });
-  }
-
-  // ========== MUSIC: RESUME ==========
-  if (prefixCommand === 'resume') {
-    const queue = player.nodes.get(message.guild.id);
+    const queue = queues.get(message.guild.id);
     if (!queue) {
       return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى.**').setColor(EMBED_COLOR)] });
     }
 
-    queue.node.setPaused(false);
-    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الاستئناف.').setColor(EMBED_COLOR)] });
+    queue.songs = [];
+    queue.player.stop();
+    queue.connection.destroy();
+    queues.delete(message.guild.id);
+
+    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الإيقاف.').setColor(EMBED_COLOR)] });
   }
 
   // ========== MUSIC: QUEUE ==========
   if (prefixCommand === 'queue' || prefixCommand === 'q') {
-    const queue = player.nodes.get(message.guild.id);
-    if (!queue || !queue.isPlaying()) {
+    const queue = queues.get(message.guild.id);
+    if (!queue || queue.songs.length === 0) {
       return message.reply({ embeds: [new EmbedBuilder().setDescription('**القائمة فارغة.**').setColor(EMBED_COLOR)] });
     }
 
-    const current = queue.currentTrack;
-    const tracks = queue.tracks.toArray().slice(0, 10);
-
-    let description = `**الآن:** ${current.title}\n\n`;
-    if (tracks.length > 0) {
-      description += tracks.map((t, i) => `**${i + 1}.** ${t.title}`).join('\n');
-    } else {
-      description += 'ما كايناش أغاني أخرى فالقائمة.';
-    }
-
+    const list = queue.songs.slice(0, 10).map((s, i) => `**${i + 1}.** ${s.title}`).join('\n');
     return message.reply({ embeds: [new EmbedBuilder()
       .setColor(EMBED_COLOR)
       .setTitle('قائمة التشغيل')
-      .setDescription(description)] });
+      .setDescription(list)] });
   }
 
   // ========== DMALL ==========
