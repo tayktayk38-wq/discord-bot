@@ -1,4 +1,5 @@
-const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType, OverwriteType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { Player } = require('discord-player');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -16,38 +17,14 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
+const player = new Player(client);
+player.extractors.loadDefault();
+
 const PREFIX = '-';
 const OWNER_ID = '1500974923441639434';
 const MUTE_LOGS_FILE = path.join(__dirname, 'vmute_logs.json');
 const PORT = process.env.PORT || 3000;
 const EMBED_COLOR = 0x4C4D54;
-
-// ========== TASK SYSTEM ==========
-const STAFF_ROLE_IDS = [
-  '1532366478546964510',
-  '1532366479457128708',
-  '1532366481180856350'
-];
-const CLAIM_CHANNEL_ID = '1533090031961374780';
-const TASK_LOG_CHANNEL_ID = '1537760271458902076';
-const TASK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-
-const taskSessions = new Map(); // userId -> session data
-
-function isStaff(member) {
-  if (!member) return false;
-  return STAFF_ROLE_IDS.some(id => member.roles.cache.has(id));
-}
-
-function isNormalMember(member) {
-  if (!member || member.user.bot) return false;
-  return !isStaff(member);
-}
-
-function countNormalMembers(channel) {
-  if (!channel || !channel.members) return 0;
-  return channel.members.filter(m => isNormalMember(m)).size;
-}
 
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -79,11 +56,34 @@ function saveVMuteLog(userId, moderator, reason, guild) {
 
 client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
+
+  client.user.setPresence({
+    activities: [{
+      name: '/help',
+      type: 0
+    }],
+    status: 'online'
+  });
 });
 
-// ========== VOICE STATE (Mute logs + Task tracking) ==========
+// ========== PLAYER EVENTS ==========
+player.events.on('playerStart', (queue, track) => {
+  queue.metadata.channel.send({
+    embeds: [new EmbedBuilder()
+      .setColor(EMBED_COLOR)
+      .setDescription(`<a:Checkmark:1535399839150379058> **〉** الآن كيشتغل: **${track.title}**`)]
+  }).catch(() => {});
+});
+
+player.events.on('error', (queue, error) => {
+  console.error('Player error:', error);
+});
+
+player.events.on('playerError', (queue, error) => {
+  console.error('Player error:', error);
+});
+
 client.on('voiceStateUpdate', async (oldState, newState) => {
-  // --- Mute logs (اللي كان قبل) ---
   if (!oldState.serverMute && newState.serverMute) {
     try {
       const fetchedLogs = await newState.guild.fetchAuditLogs({
@@ -107,38 +107,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     } catch (err) {
       console.error('Error saving voice mute log:', err);
     }
-  }
-
-  // --- Task tracking ---
-  const member = newState.member || oldState.member;
-  if (!member || !isStaff(member)) return;
-
-  const session = taskSessions.get(member.id);
-  if (!session) return;
-
-  const channel = newState.channel || oldState.channel;
-  if (!channel || channel.id !== session.channelId) {
-    // خرج من القناة ديالو → نريسيطي العداد
-    session.validSince = null;
-    session.ready = false;
-    return;
-  }
-
-  const normals = countNormalMembers(channel);
-
-  if (normals >= 3) {
-    if (!session.validSince) {
-      session.validSince = Date.now();
-    }
-
-    const elapsed = Date.now() - session.validSince;
-    if (elapsed >= TASK_DURATION_MS) {
-      session.ready = true;
-    }
-  } else {
-    // ما بقاوش 3 أعضاء عاديين → نريسيطي
-    session.validSince = null;
-    session.ready = false;
   }
 });
 
@@ -199,126 +167,101 @@ client.on('messageCreate', async (message) => {
   const prefixArgs = content.slice(PREFIX.length).trim().split(/ +/);
   const prefixCommand = prefixArgs.shift().toLowerCase();
 
-  // ========== START TASK ==========
-  if (prefixCommand === 'starttask') {
-    if (!isStaff(message.member)) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للستاف.**').setColor(EMBED_COLOR)] });
+  // ========== MUSIC: PLAY ==========
+  if (prefixCommand === 'play' || prefixCommand === 'p') {
+    const query = prefixArgs.join(' ');
+    if (!query) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Usage:** `-play <اسم الأغنية أو الرابط>`').setColor(EMBED_COLOR)] });
     }
 
-    if (taskSessions.has(message.author.id)) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**عندك بالفعل مهمة جارية. كمّل الـ 15 دقيقة أولاً.**').setColor(EMBED_COLOR)] });
+    const voiceChannel = message.member.voice.channel;
+    if (!voiceChannel) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**خصك تكون فـ قناة صوتية.**').setColor(EMBED_COLOR)] });
     }
 
     try {
-      const tempChannel = await message.guild.channels.create({
-        name: `task-${message.author.username}`.slice(0, 100),
-        type: ChannelType.GuildVoice,
-        permissionOverwrites: [
-          {
-            id: message.guild.id,
-            deny: [PermissionFlagsBits.Connect]
-          },
-          {
-            id: message.author.id,
-            allow: [
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.Speak,
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.ManageChannels,
-              PermissionFlagsBits.MoveMembers
-            ]
-          },
-          {
-            id: client.user.id,
-            allow: [
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.ManageChannels
-            ]
+      const { track } = await player.play(voiceChannel, query, {
+        nodeOptions: {
+          metadata: {
+            channel: message.channel
           }
-        ]
+        }
       });
 
-      taskSessions.set(message.author.id, {
-        channelId: tempChannel.id,
-        validSince: null,
-        ready: false,
-        createdAt: Date.now()
-      });
-
-      const embed = new EmbedBuilder()
+      return message.reply({ embeds: [new EmbedBuilder()
         .setColor(EMBED_COLOR)
-        .setDescription(`<a:Checkmark:1535399839150379058> **〉** تم إنشاء قناتك: ${tempChannel}\n\nدخل فيها و جمع **3 أعضاء عاديين** و بقاو 15 دقيقة.`);
-
-      return message.reply({ embeds: [embed] });
+        .setDescription(`<a:Checkmark:1535399839150379058> **〉** تمت الإضافة: **${track.title}**`)] });
     } catch (err) {
       console.error(err);
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش نصاوب القناة. تأكد من صلاحيات البوت.**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش نلعب هاد الأغنية.**').setColor(EMBED_COLOR)] });
     }
   }
 
-  // ========== TASK (Claim) ==========
-  if (prefixCommand === 'task') {
-    if (message.channel.id !== CLAIM_CHANNEL_ID) {
-      return; // يسكت إلا ما كانش فالقناة الصحيحة
+  // ========== MUSIC: SKIP ==========
+  if (prefixCommand === 'skip') {
+    const queue = player.nodes.get(message.guild.id);
+    if (!queue || !queue.isPlaying()) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
     }
 
-    if (!isStaff(message.member)) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للستاف.**').setColor(EMBED_COLOR)] });
+    queue.node.skip();
+    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم التخطي.').setColor(EMBED_COLOR)] });
+  }
+
+  // ========== MUSIC: STOP ==========
+  if (prefixCommand === 'stop') {
+    const queue = player.nodes.get(message.guild.id);
+    if (!queue || !queue.isPlaying()) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
     }
 
-    const session = taskSessions.get(message.author.id);
+    queue.delete();
+    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الإيقاف و مسح القائمة.').setColor(EMBED_COLOR)] });
+  }
 
-    if (!session) {
-      await message.react('❌');
-      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
-      if (logChannel) {
-        logChannel.send(`❌ **${message.author}** حاول يدير \`-task\` بلا ما يبدا المهمة (\`-starttask`).`);
-      }
-      return;
+  // ========== MUSIC: PAUSE ==========
+  if (prefixCommand === 'pause') {
+    const queue = player.nodes.get(message.guild.id);
+    if (!queue || !queue.isPlaying()) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى مشتغلة.**').setColor(EMBED_COLOR)] });
     }
 
-    // تحديث أخير للحالة
-    const tempChannel = message.guild.channels.cache.get(session.channelId);
-    if (tempChannel) {
-      const normals = countNormalMembers(tempChannel);
-      if (normals >= 3 && session.validSince) {
-        const elapsed = Date.now() - session.validSince;
-        if (elapsed >= TASK_DURATION_MS) {
-          session.ready = true;
-        }
-      }
+    queue.node.setPaused(true);
+    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الإيقاف المؤقت.').setColor(EMBED_COLOR)] });
+  }
+
+  // ========== MUSIC: RESUME ==========
+  if (prefixCommand === 'resume') {
+    const queue = player.nodes.get(message.guild.id);
+    if (!queue) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما كايناش موسيقى.**').setColor(EMBED_COLOR)] });
     }
 
-    if (session.ready) {
-      await message.react('✅');
-      taskSessions.delete(message.author.id);
+    queue.node.setPaused(false);
+    return message.reply({ embeds: [new EmbedBuilder().setDescription('<a:Checkmark:1535399839150379058> **〉** تم الاستئناف.').setColor(EMBED_COLOR)] });
+  }
 
-      // مسح القناة المؤقتة
-      if (tempChannel) {
-        tempChannel.delete().catch(() => {});
-      }
+  // ========== MUSIC: QUEUE ==========
+  if (prefixCommand === 'queue' || prefixCommand === 'q') {
+    const queue = player.nodes.get(message.guild.id);
+    if (!queue || !queue.isPlaying()) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**القائمة فارغة.**').setColor(EMBED_COLOR)] });
+    }
 
-      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
-      if (logChannel) {
-        logChannel.send(`✅ **${message.author}** كمل المهمة بنجاح (15 دقيقة + 3 أعضاء عاديين).`);
-      }
+    const current = queue.currentTrack;
+    const tracks = queue.tracks.toArray().slice(0, 10);
+
+    let description = `**الآن:** ${current.title}\n\n`;
+    if (tracks.length > 0) {
+      description += tracks.map((t, i) => `**${i + 1}.** ${t.title}`).join('\n');
     } else {
-      await message.react('❌');
-
-      let reason = 'ما كملتش الشروط.';
-      if (!session.validSince) {
-        reason = 'ما جمعتيش 3 أعضاء عاديين فالقناة ديالك.';
-      } else {
-        const elapsedMin = Math.floor((Date.now() - session.validSince) / 60000);
-        reason = `الوقت اللي قضيتوه صحيح هو تقريباً ${elapsedMin} دقيقة من أصل 15.`;
-      }
-
-      const logChannel = message.guild.channels.cache.get(TASK_LOG_CHANNEL_ID);
-      if (logChannel) {
-        logChannel.send(`❌ **${message.author}** ما تحسبتش ليه المهمة.\n**السبب:** ${reason}`);
-      }
+      description += 'ما كايناش أغاني أخرى فالقائمة.';
     }
+
+    return message.reply({ embeds: [new EmbedBuilder()
+      .setColor(EMBED_COLOR)
+      .setTitle('قائمة التشغيل')
+      .setDescription(description)] });
   }
 
   // ========== DMALL ==========
