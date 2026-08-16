@@ -6,8 +6,8 @@ const {
   PermissionFlagsBits,
   ChannelType,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder
 } = require('discord.js');
 const { joinVoiceChannel } = require('@discordjs/voice');
 const fs = require('fs');
@@ -40,27 +40,49 @@ const BANNER_URL = 'https://media.discordapp.net/attachments/1536490013838024895
 const categories = {
   moderation: {
     name: 'Moderation',
-    emoji: '🛡️',
+    emoji: '<:moderation:1538420590866858075>',
+    description: 'View moderation commands',
     commands: [
-      ['-ban', 'bans the specified member'],
-      ['-unban', 'unbans the specified member'],
-      ['-vmute', 'voice mutes a member'],
-      ['-vunmute', 'removes voice mute from a member'],
-      ['-vmlogs', 'shows voice mute logs of a member'],
-      ['-role', 'adds or removes a role from a member']
+      ['-ban', '<a:prettyarrowR:1538419123934199829> **__bans the specified member__**'],
+      ['-unban', '<a:prettyarrowR:1538419123934199829> **__unbans the specified member__**'],
+      ['-vmute', '<a:prettyarrowR:1538419123934199829> **__voice mutes a member__**'],
+      ['-vunmute', '<a:prettyarrowR:1538419123934199829> **__removes voice mute from a member__**'],
+      ['-vmlogs', '<a:prettyarrowR:1538419123934199829> **__shows voice mute logs of a member__**'],
+      ['-role', '<a:prettyarrowR:1538419123934199829> **__adds or removes a role from a member__**']
     ]
   },
   utility: {
     name: 'Utility',
-    emoji: '🛠️',
+    emoji: '<:staff:1538421193898459196>',
+    description: 'View utility commands',
     commands: [
-      ['a', 'shows user avatar'],
-      ['bn', 'shows user banner'],
-      ['-join', 'bot joins your voice channel (Owner only)'],
-      ['-help', 'shows this help menu']
+      ['a', '<a:prettyarrowR:1538419123934199829> **__shows user avatar__**'],
+      ['bn', '<a:prettyarrowR:1538419123934199829> **__shows user banner__**'],
+      ['-join', '<a:prettyarrowR:1538419123934199829> **__bot joins your voice channel (Owner only)__**'],
+      ['-help', '<a:prettyarrowR:1538419123934199829> **__shows this help menu__**']
     ]
   }
 };
+
+function createCategoryMenu() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('help_category')
+    .setPlaceholder('Choose the command category')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Moderation')
+        .setDescription('View moderation commands')
+        .setValue('moderation')
+        .setEmoji('<:moderation:1538420590866858075>'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Utility')
+        .setDescription('View utility commands')
+        .setValue('utility')
+        .setEmoji('<:staff:1538421193898459196>')
+    );
+
+  return new ActionRowBuilder().addComponents(menu);
+}
 
 function createHelpHome() {
   const embed = new EmbedBuilder()
@@ -73,20 +95,10 @@ function createHelpHome() {
     )
     .setFooter({ text: 'tota • Help Menu' });
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('help_moderation')
-      .setLabel('Moderation')
-      .setEmoji('🛡️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('help_utility')
-      .setLabel('Utility')
-      .setEmoji('🛠️')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embeds: [embed], components: [row] };
+  return {
+    embeds: [embed],
+    components: [createCategoryMenu()]
+  };
 }
 
 function createCategoryPage(categoryId) {
@@ -95,7 +107,7 @@ function createCategoryPage(categoryId) {
 
   let description = `## ${category.emoji} ${category.name}\n\n`;
   for (const [command, text] of category.commands) {
-    description += `\`${command}\`\n↳ ${text}\n\n`;
+    description += `\`${command}\`\n${text}\n\n`;
   }
 
   const embed = new EmbedBuilder()
@@ -104,24 +116,10 @@ function createCategoryPage(categoryId) {
     .setDescription(description)
     .setFooter({ text: 'tota • Help Menu' });
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('help_home')
-      .setLabel('← Back')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('help_moderation')
-      .setLabel('Moderation')
-      .setEmoji('🛡️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('help_utility')
-      .setLabel('Utility')
-      .setEmoji('🛠️')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embeds: [embed], components: [row] };
+  return {
+    embeds: [embed],
+    components: [createCategoryMenu()]
+  };
 }
 
 http.createServer((req, res) => {
@@ -458,31 +456,21 @@ client.on('messageCreate', async (message) => {
 });
 
 // ==============================
-// INTERACTIONS (Help Buttons) - FIXED
+// INTERACTIONS
 // ==============================
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isButton()) return;
+  if (!interaction.isStringSelectMenu()) return;
+  if (interaction.customId !== 'help_category') return;
 
   try {
-    // Acknowledge quickly to avoid Unknown Interaction
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate();
+    const categoryId = interaction.values[0];
+    const page = createCategoryPage(categoryId);
+
+    if (!page) {
+      return interaction.reply({ content: 'Category not found.', ephemeral: true });
     }
 
-    if (interaction.customId === 'help_home') {
-      return interaction.editReply(createHelpHome());
-    }
-
-    if (interaction.customId === 'help_moderation') {
-      const page = createCategoryPage('moderation');
-      if (page) return interaction.editReply(page);
-    }
-
-    if (interaction.customId === 'help_utility') {
-      const page = createCategoryPage('utility');
-      if (page) return interaction.editReply(page);
-    }
-
+    await interaction.update(page);
   } catch (err) {
     console.error('Interaction Error:', err);
   }
