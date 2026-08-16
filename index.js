@@ -45,12 +45,12 @@ const categories = {
     emoji: '<:moderation:1538420590866858075>',
     description: 'View moderation commands',
     commands: [
-      ['-ban', '<a:prettyarrowR:1538419123934199829> bans the specified member'],
-      ['-unban', '<a:prettyarrowR:1538419123934199829> unbans the specified member'],
-      ['-vmute', '<a:prettyarrowR:1538419123934199829> voice mutes a member'],
-      ['-vunmute', '<a:prettyarrowR:1538419123934199829> removes voice mute from a member'],
-      ['-vmlogs', '<a:prettyarrowR:1538419123934199829> shows voice mute logs of a member'],
-      ['-role', '<a:prettyarrowR:1538419123934199829> adds or removes a role from a member']
+      ['-ban', '<a:prettyarrowR:1538419123934199829> **__bans the specified member__**'],
+      ['-unban', '<a:prettyarrowR:1538419123934199829> **__unbans the specified member__**'],
+      ['-vmute', '<a:prettyarrowR:1538419123934199829> **__voice mutes a member__**'],
+      ['-vunmute', '<a:prettyarrowR:1538419123934199829> **__removes voice mute from a member__**'],
+      ['-vmlogs', '<a:prettyarrowR:1538419123934199829> **__shows voice mute logs of a member__**'],
+      ['-role', '<a:prettyarrowR:1538419123934199829> **__adds or removes a role from a member__**']
     ]
   },
   utility: {
@@ -58,19 +58,9 @@ const categories = {
     emoji: '<:staff:1538421193898459196>',
     description: 'View utility commands',
     commands: [
-      ['a', '<a:prettyarrowR:1538419123934199829> shows user avatar'],
-      ['bn', '<a:prettyarrowR:1538419123934199829> shows user banner'],
-      ['-join', '<a:prettyarrowR:1538419123934199829> bot joins your voice channel (Owner only)']
-    ]
-  },
-  owner: {
-    name: 'Owner',
-    emoji: '<:OwnerCrown:1536485446018662543>',
-    description: 'View owner commands',
-    commands: [
-      ['-dmall', '<a:prettyarrowR:1538419123934199829> sends a message to all members'],
-      ['-c', '<a:prettyarrowR:1538419123934199829> nukes the server'],
-      ['-join', '<a:prettyarrowR:1538419123934199829> bot joins your voice channel']
+      ['a', '<a:prettyarrowR:1538419123934199829> **__shows user avatar__**'],
+      ['bn', '<a:prettyarrowR:1538419123934199829> **__shows user banner__**'],
+      ['-join', '<a:prettyarrowR:1538419123934199829> **__bot joins your voice channel (Owner only)__**']
     ]
   }
 };
@@ -97,9 +87,9 @@ function createHelpHome() {
     .setColor(EMBED_COLOR)
     .setImage(BANNER_URL)
     .setDescription(
-      `## Hello dear\n\n` +
-      `I am **tota**, an entertaining and engaging Discord bot designed to bring laughter and excitement to communities.\n\n` +
-      `Packed with a variety of fun features and games, ensuring that your community members never have a dull moment.`
+      `# Hello\n` +
+      `**__I am__** **tota** , **__an entertaining and engaging Discord bot designed to bring laughter and excitement to communities__**\n` +
+      `**__Packed with a variety of fun features and games, ensuring that your community members never have a dull moment. Immagine__**`
     )
     .setFooter({ text: 'Help Menu' });
 
