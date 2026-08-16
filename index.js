@@ -566,4 +566,14 @@ client.on('interactionCreate', async interaction => {
     const parts = interaction.customId.split('_');
     const action = parts[1];
     const categoryId = parts[2];
-    const currentPage
+    const currentPage = Number(parts[3]);
+
+    let newPage = currentPage;
+    if (action === 'next') newPage++;
+    if (action === 'back') newPage--;
+
+    return interaction.update(createCategoryPage(categoryId, newPage));
+  }
+});
+
+client.login(process.env.TOKEN);
