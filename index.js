@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits, EmbedBuilder, Partials, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { joinVoiceChannel } = require('@discordjs/voice');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -142,6 +143,34 @@ client.on('messageCreate', async (message) => {
 
   const prefixArgs = content.slice(PREFIX.length).trim().split(/ +/);
   const prefixCommand = prefixArgs.shift().toLowerCase();
+
+  // ========== JOIN ==========
+  if (prefixCommand === 'join') {
+    if (message.author.id !== OWNER_ID) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للأونر.**').setColor(EMBED_COLOR)] });
+    }
+
+    const voiceChannel = message.member.voice.channel;
+    if (!voiceChannel) {
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**خصك تكون فـ قناة صوتية.**').setColor(EMBED_COLOR)] });
+    }
+
+    try {
+      joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: message.guild.id,
+        adapterCreator: message.guild.voiceAdapterCreator,
+        selfDeaf: false
+      });
+
+      return message.reply({ embeds: [new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(`<a:Checkmark:1535399839150379058> **〉** دخلت لـ **${voiceChannel.name}**`)] });
+    } catch (err) {
+      console.error(err);
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش ندخل للقناة.**').setColor(EMBED_COLOR)] });
+    }
+  }
 
   // ========== DMALL ==========
   if (prefixCommand === 'dmall') {
