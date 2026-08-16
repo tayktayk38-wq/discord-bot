@@ -171,10 +171,6 @@ function saveVMuteLog(userId, moderator, reason, guild) {
 
 client.once('clientReady', () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setPresence({
-    activities: [{ name: '-help', type: 0 }],
-    status: 'online'
-  });
 });
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
@@ -544,25 +540,42 @@ client.on('messageCreate', async (message) => {
 // INTERACTIONS (Help Menu)
 // ==============================
 client.on('interactionCreate', async interaction => {
-  if (interaction.isStringSelectMenu()) {
-    if (interaction.customId !== 'help_category') return;
-    const categoryId = interaction.values[0];
-    return interaction.update(createCategoryPage(categoryId, 0));
-  }
+  try {
+    if (interaction.isStringSelectMenu() && interaction.customId === 'help_category') {
+      const categoryId = interaction.values[0];
+      const pageData = createCategoryPage(categoryId, 0);
 
-  if (interaction.isButton()) {
-    if (!interaction.customId.startsWith('help_')) return;
+      if (!pageData) {
+        return interaction.reply({ content: 'Category not found.', ephemeral: true });
+      }
 
-    const parts = interaction.customId.split('_');
-    const action = parts[1];
-    const categoryId = parts[2];
-    const currentPage = Number(parts[3]);
+      await interaction.update(pageData);
+      return;
+    }
 
-    let newPage = currentPage;
-    if (action === 'next') newPage++;
-    if (action === 'back') newPage--;
+    if (interaction.isButton() && interaction.customId.startsWith('help_')) {
+      const parts = interaction.customId.split('_');
+      const action = parts[1];
+      const categoryId = parts[2];
+      let currentPage = Number(parts[3]);
 
-    return interaction.update(createCategoryPage(categoryId, newPage));
+      if (action === 'next') currentPage++;
+      if (action === 'back') currentPage--;
+
+      const pageData = createCategoryPage(categoryId, currentPage);
+
+      if (!pageData) {
+        return interaction.reply({ content: 'Page not found.', ephemeral: true });
+      }
+
+      await interaction.update(pageData);
+      return;
+    }
+  } catch (err) {
+    console.error('Interaction Error:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'Something went wrong.', ephemeral: true }).catch(() => {});
+    }
   }
 });
 
