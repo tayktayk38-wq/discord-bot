@@ -37,40 +37,40 @@ const EMBED_COLOR = 0x4C4D54;
 const BANNER_URL = 'https://media.discordapp.net/attachments/1536490013838024895/1538415611602927636/79dc8d3cbf1cebae929104d13f0ea218.gif';
 
 // ==============================
-// HELP CATEGORIES (ملائمة للأوامر ديالنا)
+// HELP CATEGORIES
 // ==============================
 const categories = {
   moderation: {
     name: 'Moderation',
-    emoji: '🛡️',
-    description: 'أوامر الإدارة و الموديريشن',
+    emoji: '<:moderation:1538420590866858075>',
+    description: 'View moderation commands',
     commands: [
-      ['-ban', 'إباند عضو (بالمنشن أو ID)'],
-      ['-unban', 'فك الباند عن عضو'],
-      ['-vmute', 'ميوت صوتي لعضو'],
-      ['-vunmute', 'فك الميوت الصوتي'],
-      ['-vmlogs', 'عرض سجل الميوتات الصوتية'],
-      ['-role', 'إضافة أو إزالة رول']
+      ['-ban', '<a:prettyarrowR:1538419123934199829> bans the specified member'],
+      ['-unban', '<a:prettyarrowR:1538419123934199829> unbans the specified member'],
+      ['-vmute', '<a:prettyarrowR:1538419123934199829> voice mutes a member'],
+      ['-vunmute', '<a:prettyarrowR:1538419123934199829> removes voice mute from a member'],
+      ['-vmlogs', '<a:prettyarrowR:1538419123934199829> shows voice mute logs of a member'],
+      ['-role', '<a:prettyarrowR:1538419123934199829> adds or removes a role from a member']
     ]
   },
   utility: {
     name: 'Utility',
-    emoji: '🛠️',
-    description: 'أوامر عامة و مفيدة',
+    emoji: '<:staff:1538421193898459196>',
+    description: 'View utility commands',
     commands: [
-      ['a', 'عرض الأفاتار'],
-      ['bn', 'عرض البانر'],
-      ['-join', 'البوت يدخل للقناة الصوتية (أونر فقط)']
+      ['a', '<a:prettyarrowR:1538419123934199829> shows user avatar'],
+      ['bn', '<a:prettyarrowR:1538419123934199829> shows user banner'],
+      ['-join', '<a:prettyarrowR:1538419123934199829> bot joins your voice channel (Owner only)']
     ]
   },
   owner: {
     name: 'Owner',
-    emoji: '👑',
-    description: 'أوامر خاصة بالأونر',
+    emoji: '<:OwnerCrown:1536485446018662543>',
+    description: 'View owner commands',
     commands: [
-      ['-dmall', 'إرسال رسالة لجميع الأعضاء'],
-      ['-c', 'نوك السيرفر (خطير)'],
-      ['-join', 'إدخال البوت للقناة الصوتية']
+      ['-dmall', '<a:prettyarrowR:1538419123934199829> sends a message to all members'],
+      ['-c', '<a:prettyarrowR:1538419123934199829> nukes the server'],
+      ['-join', '<a:prettyarrowR:1538419123934199829> bot joins your voice channel']
     ]
   }
 };
@@ -78,7 +78,7 @@ const categories = {
 function createCategoryMenu() {
   const menu = new StringSelectMenuBuilder()
     .setCustomId('help_category')
-    .setPlaceholder('اختار الكاتيجوري')
+    .setPlaceholder('Choose the command category')
     .addOptions(
       Object.entries(categories).map(([id, category]) =>
         new StringSelectMenuOptionBuilder()
@@ -97,9 +97,9 @@ function createHelpHome() {
     .setColor(EMBED_COLOR)
     .setImage(BANNER_URL)
     .setDescription(
-      `## مرحباً\n\n` +
-      `أنا بوت متعدد الخصائص.\n\n` +
-      `اختار كاتيجوري من القائمة تحت باش تشوف الأوامر.`
+      `## Hello dear\n\n` +
+      `I am **tota**, an entertaining and engaging Discord bot designed to bring laughter and excitement to communities.\n\n` +
+      `Packed with a variety of fun features and games, ensuring that your community members never have a dull moment.`
     )
     .setFooter({ text: 'Help Menu' });
 
@@ -122,7 +122,7 @@ function createCategoryPage(categoryId, page = 0) {
 
   let description = `## ${category.emoji} ${category.name}\n\n`;
   for (const [command, text] of commands) {
-    description += `\`${command}\`\n↳ ${text}\n\n`;
+    description += `\`${command}\`\n${text}\n\n`;
   }
 
   const embed = new EmbedBuilder()
@@ -279,12 +279,12 @@ client.on('messageCreate', async (message) => {
   // ========== JOIN ==========
   if (prefixCommand === 'join') {
     if (message.author.id !== OWNER_ID) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**هاد الأمر غير للأونر.**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**This command is restricted to the bot owner.**').setColor(EMBED_COLOR)] });
     }
 
     const voiceChannel = message.member.voice.channel;
     if (!voiceChannel) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**خصك تكون فـ قناة صوتية.**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**You need to be in a voice channel.**').setColor(EMBED_COLOR)] });
     }
 
     try {
@@ -297,22 +297,22 @@ client.on('messageCreate', async (message) => {
 
       return message.reply({ embeds: [new EmbedBuilder()
         .setColor(EMBED_COLOR)
-        .setDescription(`**دخلت لـ ${voiceChannel.name}**`)] });
+        .setDescription(`**Joined ${voiceChannel.name}**`)] });
     } catch (err) {
       console.error(err);
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**ما قدرتش ندخل للقناة.**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Failed to join the voice channel.**').setColor(EMBED_COLOR)] });
     }
   }
 
   // ========== DMALL ==========
   if (prefixCommand === 'dmall') {
     if (message.author.id !== OWNER_ID) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**This command is restricted to the bot owner**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**This command is restricted to the bot owner.**').setColor(EMBED_COLOR)] });
     }
 
     const msgToSend = prefixArgs.join(' ');
     if (!msgToSend) {
-      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Please enter the message**').setColor(EMBED_COLOR)] });
+      return message.reply({ embeds: [new EmbedBuilder().setDescription('**Please enter the message.**').setColor(EMBED_COLOR)] });
     }
 
     await message.reply({ embeds: [new EmbedBuilder().setDescription(`**Starting message delivery...**`).setColor(EMBED_COLOR)] });
@@ -382,7 +382,6 @@ client.on('messageCreate', async (message) => {
         if (!target.bannable) {
           return message.reply({ embeds: [new EmbedBuilder().setDescription('**I cannot ban this user.**').setColor(EMBED_COLOR)] });
         }
-
         await target.ban({ reason });
         return message.reply({ embeds: [new EmbedBuilder().setDescription(`**${target} has been banned**`).setColor(EMBED_COLOR)] });
       } else {
@@ -567,14 +566,4 @@ client.on('interactionCreate', async interaction => {
     const parts = interaction.customId.split('_');
     const action = parts[1];
     const categoryId = parts[2];
-    const currentPage = Number(parts[3]);
-
-    let newPage = currentPage;
-    if (action === 'next') newPage++;
-    if (action === 'back') newPage--;
-
-    return interaction.update(createCategoryPage(categoryId, newPage));
-  }
-});
-
-client.login(process.env.TOKEN);
+    const currentPage
