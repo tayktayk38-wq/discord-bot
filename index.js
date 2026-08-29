@@ -45,9 +45,9 @@ const Canvas = require("canvas");
 // ============================================================
 // CONFIG
 // ============================================================
-const TOKEN = process.env.DISCORD_TOKEN;
+const TOKEN = process.env.TOKEN;
 if (!TOKEN) {
-  console.error("Missing DISCORD_TOKEN in .env");
+  console.error("Missing TOKEN in environment variables");
   process.exit(1);
 }
 const PREFIX = "-";
