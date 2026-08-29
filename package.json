@@ -2,8 +2,11 @@
   "name": "astra-bot",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
+    "@discordjs/voice": "^0.18.0",
     "better-sqlite3": "^11.7.0",
     "canvas": "^2.11.2",
     "discord.js": "^14.16.3",
