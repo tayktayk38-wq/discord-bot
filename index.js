@@ -1,5 +1,3 @@
-require("dotenv").config();
-
 // ============================================================
 // MERGED BOT - astra + JAIL (FIXED)
 // One Client • One login • No name conflicts
@@ -33,7 +31,10 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  MessageFlags
+  MessageFlags,
+  LabelBuilder,
+  FileUploadBuilder,
+  AuditLogEvent
 } = require("discord.js");
 
 const fs = require("fs");
@@ -41,15 +42,12 @@ const path = require("path");
 const Database = require("better-sqlite3");
 const { createCanvas, loadImage } = require("canvas");
 const Canvas = require("canvas");
+const express = require("express");
 
 // ============================================================
 // CONFIG
 // ============================================================
-const TOKEN = process.env.TOKEN;
-if (!TOKEN) {
-  console.error("Missing TOKEN in environment variables");
-  process.exit(1);
-}
+const TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = "-";
 const COLOR = 0xdfe0ec;
 const EMBED_COLOR = 0xdfe0ec;
@@ -60,6 +58,7 @@ const NO = "<:emojigg_no:1539137860400324639>";
 const CHECK = "<a:Checkmark:1535399839150379058>";
 const BAN_EMOJI = "<:Dabingbong:1538785839897649212>";
 const PAPER_PLANE = "<:PaperPlane:1538709170189107200>";
+const ARROW = "<a:prettyarrowR:1538419123934199829>";
 const MUTE_EMOJI = "<:server_mute:1535407964066943076>";
 const WARN1_EMOJI = "<:LowWarning:1538779458083753985>";
 const WARN2_EMOJI = "<:Warn:1538779652003332096>";
@@ -77,6 +76,8 @@ const VERIFICATION_BANNER = "https://media.discordapp.net/attachments/1537611791
 const VERIFICATION_AVATAR = "https://media.discordapp.net/attachments/1537611791021121556/1542132087518396556/image.png?ex=6a901ded&is=6a8ecc6d&hm=8923654f861ea3e3c17de0139b251149c2a6eaa5471f8be8a13a1fd49f9977b5&=&format=webp&quality=lossless";
 const MUSIC_BANNER_URL = "https://media.discordapp.net/attachments/1311838374075568179/1541739938486157362/image.png?ex=6a8eb0b5&is=6a8d5f35&hm=9b08b32790d36e497fc01665ddfd8ffa6a8e70c98d2ca37f5bc9f65481a789c0&=&format=webp&quality=lossless";
 const BANNER_URL = "https://media.discordapp.net/attachments/1515171494764875907/1541751594088140800/2f03bd9063e6e89d8f7327dd4565b41b.png";
+const ESAY_BANNER_URL =
+  "https://media.discordapp.net/attachments/1537611791021121556/1543699978214580355/92939a8ac7990f2bd8e080775a6e6474-2.webp?ex=6a95d223&is=6a9480a3&hm=94f85643e0a2167a46c28545ff96a1dfd8c851ae88e03c8d557c669e361e1327&=&format=webp";
 const TICKET_BANNER_URL = "https://media.discordapp.net/attachments/1537611791021121556/1540327025741398118/0ce6d312c2daaeee7b86e16615d532cd.jpg?ex=6a8f7b94&is=6a8e2a14&hm=083a326ddba3fee3b69c2f73df7f3604133d7eac6230d769f4fa377c1989ed1b&=&format=webp"; // غير إلا بغيتي
 const APPLICATION_BANNER_URL = "https://media.discordapp.net/attachments/1518709079881679028/1542132316896497764/image.png?ex=6a901e23&is=6a8ecca3&hm=51b9fb5c25fa15ab672cd02fd71f5987dad3669d4a41e1ac2ade5c010ceeb041&=&format=webp&quality=lossless";
 const APPLICATION_RESULT_BANNER_URL = "https://media.discordapp.net/attachments/1518709079881679028/1542132316896497764/image.png?ex=6a901e23&is=6a8ecca3&hm=51b9fb5c25fa15ab672cd02fd71f5987dad3669d4a41e1ac2ade5c010ceeb041&=&format=webp&quality=lossless";
@@ -106,7 +107,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildModeration
   ]
 });
 
@@ -123,8 +125,10 @@ const INVITES_FILE = path.join(DATA_DIR, "invites.json");
 const JAIL_FILE = path.join(DATA_DIR, "jail.json");
 const TICKET_FILE = path.join(DATA_DIR, "ticket.json");
 const STAFF_FILE = path.join(DATA_DIR, "staff.json");
+const ROLELOGS_FILE = path.join(DATA_DIR, "rolelogs.json");
+const SELFROLES_FILE = path.join(DATA_DIR, "selfroles.json");
 
-[MUTE_LOGS_FILE, WARN_LOGS_FILE, VERIFICATION_FILE, INVITES_FILE, JAIL_FILE, TICKET_FILE, STAFF_FILE].forEach(f => {
+[MUTE_LOGS_FILE, WARN_LOGS_FILE, VERIFICATION_FILE, INVITES_FILE, JAIL_FILE, TICKET_FILE, STAFF_FILE, ROLELOGS_FILE, SELFROLES_FILE].forEach(f => {
   if (!fs.existsSync(f)) fs.writeFileSync(f, "{}");
 });
 
@@ -172,6 +176,353 @@ function canManageChannels(member) {
 
 function canManageMessages(member) {
   return member.permissions.has(PermissionFlagsBits.ManageMessages);
+}
+
+// ============================================================
+// ROLE LOGS SYSTEM
+// ============================================================
+const EMOJI_ROLE_REMOVE = "<:remove:1541726521113182280>";
+const EMOJI_ROLE_ADD = "<:PlusLogo:1536495735141302343>";
+
+// ============================================================
+// ========== SELF ROLES SYSTEM ==========
+// ============================================================
+const SELF_BANNERS = [
+  "https://media.discordapp.net/attachments/1536485784482357268/1544020439557218455/04394df2c4d61a148527f5fd82048cc9.png?ex=6a96fc97&is=6a95ab17&hm=d79f94e1ac22ccabaac1536eb821fcb4ee7da6c3a8760b276499823821b3cb8a&=&format=webp&quality=lossless",
+  "https://media.discordapp.net/attachments/1540722743123644516/1544037912629346314/49d262d688b852bd164191c893e960bd.png?ex=6a970cdd&is=6a95bb5d&hm=792d7498c3b913b46b9a742f76ed8252a8add3d20d8a63fad654d367811e68d4&=&format=webp&quality=lossless",
+  "https://media.discordapp.net/attachments/1540722743123644516/1544037950310846484/3ba6caa080d1df521b36b08a89f5c21b.png?ex=6a970ce6&is=6a95bb66&hm=66ccc6e32cb50caf5f059d4bfefbe077d65c0324ed3f5a701d4a22d55f11e4c3&=&format=webp&quality=lossless",
+  "https://media.discordapp.net/attachments/1540722743123644516/1544038006363787275/f8746a4aa36f9a1019003fa0159c3141.png?ex=6a970cf3&is=6a95bb73&hm=a1ec747d76a49aebbb20d203b19700da499249449efa58e76cb1b38ceca1d81d&=&format=webp&quality=lossless"
+];
+const HELLO_KITTY = "<a:HelloKittyWave:1544017859116535961>";
+const DND_EMOJI = "<:DoNotDisturb:1540302630109188198>";
+
+let selfRolesDB = {};
+try {
+  if (fs.existsSync(SELFROLES_FILE)) {
+    selfRolesDB = JSON.parse(fs.readFileSync(SELFROLES_FILE, "utf8")) || {};
+  }
+} catch { selfRolesDB = {}; }
+
+function saveSelfRolesDB() {
+  try { fs.writeFileSync(SELFROLES_FILE, JSON.stringify(selfRolesDB, null, 2)); } catch (e) { console.error(e); }
+}
+
+function guildSelfData(guildId) {
+  if (!selfRolesDB[guildId]) selfRolesDB[guildId] = { categories: {}, roleEmojis: {} };
+  if (!selfRolesDB[guildId].categories) selfRolesDB[guildId].categories = {};
+  if (!selfRolesDB[guildId].roleEmojis) selfRolesDB[guildId].roleEmojis = {};
+  return selfRolesDB[guildId];
+}
+
+const selfRoleSessions = new Map();
+
+function findSelfSession(guildId, userId, categoryId = null) {
+  for (const [sessionId, session] of selfRoleSessions) {
+    if (session.guildId !== guildId || session.userId !== userId) continue;
+    if (categoryId && session.categoryId !== categoryId) continue;
+    return { id: sessionId, session };
+  }
+  return null;
+}
+
+function getValidSelfRoles(guild, roleIds) {
+  return (roleIds || []).filter(id => {
+    const role = guild.roles.cache.get(id);
+    return role && !role.managed;
+  });
+}
+
+function parseSelfEmoji(emojiInput) {
+  if (!emojiInput) return null;
+  const customMatch = String(emojiInput).match(/<a?:(\w+):(\d+)>/);
+  if (customMatch) {
+    return { id: customMatch[2], name: customMatch[1], animated: String(emojiInput).startsWith("<a:") };
+  }
+  return emojiInput;
+}
+
+function createSelfCategoryPanel(sessionId) {
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Create Category"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Create a category for your self-role panel."));
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`create_category:${sessionId}`).setLabel("Create Category").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`cancel_setup:${sessionId}`).setLabel("Cancel").setStyle(ButtonStyle.Secondary)
+  ));
+  return c;
+}
+
+function selfRoleSelectionPanel(session) {
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Select Roles for this Category"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text(`**Selected Roles:** ${session.selectedRoles.length}`));
+  c.addTextDisplayComponents(text("Use the role selector or search for a role by name."));
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder().setCustomId(`setup_roles:${session.categoryId}`).setPlaceholder("Select roles").setMinValues(1).setMaxValues(25)
+  ));
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`search_role:${session.categoryId}`).setLabel("Search Role").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`clear_roles:${session.categoryId}`).setLabel("Clear").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`continue_roles:${session.categoryId}`).setLabel("Continue").setStyle(ButtonStyle.Success)
+  ));
+  return c;
+}
+
+function selfBannerSelectionPanel(session) {
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Choose Banner for this Category"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Select the banner you want to use for this category."));
+  c.addSeparatorComponents(separator());
+  const options = SELF_BANNERS.map((url, index) =>
+    new StringSelectMenuOptionBuilder().setLabel(`Banner ${index + 1}`).setValue(String(index)).setDescription(`Choose banner number ${index + 1}`)
+  );
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId(`select_banner:${session.categoryId}`).setPlaceholder("Select a banner").setMinValues(1).setMaxValues(1).addOptions(options)
+  ));
+  return c;
+}
+
+function selfSearchRoleModal(categoryId) {
+  const modal = new ModalBuilder().setCustomId(`search_role_modal:${categoryId}`).setTitle("Search Role");
+  modal.addComponents(new ActionRowBuilder().addComponents(
+    new TextInputBuilder().setCustomId("role_name").setLabel("Role Name").setPlaceholder("Type the role name...").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+  ));
+  return modal;
+}
+
+function selfRoleSearchPanel(guild, session, query) {
+  const roles = [...guild.roles.cache.values()]
+    .filter(role => !role.managed && role.id !== guild.id)
+    .filter(role => role.name.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 25);
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Select Role"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text(`Search results for **${query}**`));
+  c.addSeparatorComponents(separator());
+  if (roles.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No roles found.**`));
+  } else {
+    const options = roles.map(role => new StringSelectMenuOptionBuilder().setLabel(role.name.slice(0, 100)).setValue(role.id));
+    c.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(`search_result:${session.categoryId}`).setPlaceholder("Select a role to add").setMinValues(1).setMaxValues(1).addOptions(options)
+    ));
+  }
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`back_roles:${session.categoryId}`).setLabel("Back").setStyle(ButtonStyle.Secondary)
+  ));
+  return c;
+}
+
+function selfChannelPanel() {
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Select the Channel"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Select the channel where the self-role panel should be sent."));
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder().setCustomId("select_panel_channel").setPlaceholder("Select a channel").setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1)
+  ));
+  return c;
+}
+
+function buildSelfRolePanel(guild, category, page = 0) {
+  const data = guildSelfData(guild.id);
+  const roleEmojis = data.roleEmojis || {};
+  let roleIds = getValidSelfRoles(guild, category.roles || []);
+  const totalPages = Math.max(1, Math.ceil(roleIds.length / 25));
+  page = Math.max(0, Math.min(page, totalPages - 1));
+  const pageRoles = roleIds.slice(page * 25, page * 25 + 25).map(id => guild.roles.cache.get(id)).filter(Boolean);
+  const c = new ContainerBuilder();
+  const titleEmoji = category.emoji ? `${category.emoji} ` : "";
+  c.addTextDisplayComponents(text(`## ${titleEmoji}${category.name} Roles`));
+  c.addSeparatorComponents(separator());
+  const bannerUrl = category.banner || SELF_BANNERS[0];
+  c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(bannerUrl)));
+  c.addSeparatorComponents(separator());
+  const emoji = category.emoji || HELLO_KITTY;
+  c.addTextDisplayComponents(text(`${emoji}  ⌋ **__Select Your Favorite ${category.name} From The Menu Below!__**`));
+  c.addSeparatorComponents(separator());
+  if (pageRoles.length > 0) {
+    const options = pageRoles.map(role => {
+      const option = new StringSelectMenuOptionBuilder().setLabel(role.name.slice(0, 100)).setValue(role.id).setDescription(`Get • ${role.name}`.slice(0, 100));
+      const roleEmoji = roleEmojis[role.id];
+      if (roleEmoji) {
+        const parsed = parseSelfEmoji(roleEmoji);
+        if (parsed) option.setEmoji(parsed);
+      }
+      return option;
+    });
+    c.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(`selfrole:${category.id}:${page}`).setPlaceholder("Select a role from the menu").setMinValues(1).setMaxValues(1).addOptions(options)
+    ));
+  } else {
+    c.addTextDisplayComponents(text(`${NO} **No roles are configured for this category.**`));
+  }
+  if (totalPages > 1) {
+    c.addSeparatorComponents(separator());
+    c.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`previous_page:${category.id}:${page}`).setLabel("Previous").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`next_page:${category.id}:${page}`).setLabel("Next").setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+    ));
+    c.addTextDisplayComponents(text(`-# Page ${page + 1} / ${totalPages}`));
+  }
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text(`-# Powered by **${guild.name}**. Copyright © by **${guild.name}**`));
+  return c;
+}
+
+function simpleSelfV2(message) {
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text(message));
+  return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [c] };
+}
+
+async function updateSelfPanelsForRole(guild, roleId) {
+  const data = guildSelfData(guild.id);
+  for (const category of Object.values(data.categories)) {
+    if (!category.roles?.includes(roleId)) continue;
+    if (!category.channelId || !category.messageId) continue;
+    const channel = guild.channels.cache.get(category.channelId);
+    if (!channel) continue;
+    try {
+      const message = await channel.messages.fetch(category.messageId);
+      await message.edit({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(guild, category, 0)] });
+    } catch (err) { console.error("Failed to update self panel:", err); }
+  }
+}
+
+function emojiRoleCategoryPanel(guild) {
+  const data = guildSelfData(guild.id);
+  const categories = Object.entries(data.categories);
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Add Emoji to Role"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Select the category that contains the role."));
+  c.addSeparatorComponents(separator());
+  if (categories.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No categories found.**`));
+    return c;
+  }
+  const options = categories.slice(0, 25).map(([id, cat]) =>
+    new StringSelectMenuOptionBuilder().setLabel((cat.name || "Unknown").slice(0, 100)).setValue(id)
+  );
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId("emojirole_choose_category").setPlaceholder("Select a category").setMinValues(1).setMaxValues(1).addOptions(options)
+  ));
+  return c;
+}
+
+function emojiRoleSelectPanel(guild, categoryId) {
+  const data = guildSelfData(guild.id);
+  const category = data.categories[categoryId];
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text(`## Select Role — ${category?.name || "Category"}`));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Select the role you want to add an emoji to."));
+  c.addSeparatorComponents(separator());
+  if (!category || !category.roles || category.roles.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No roles in this category.**`));
+    return c;
+  }
+  const roles = getValidSelfRoles(guild, category.roles).map(id => guild.roles.cache.get(id)).filter(Boolean).slice(0, 25);
+  if (roles.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No valid roles found.**`));
+    return c;
+  }
+  const options = roles.map(role => new StringSelectMenuOptionBuilder().setLabel(role.name.slice(0, 100)).setValue(role.id));
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId(`emojirole_select_role:${categoryId}`).setPlaceholder("Select a role").setMinValues(1).setMaxValues(1).addOptions(options)
+  ));
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`emojirole_search:${categoryId}`).setLabel("Search Role").setStyle(ButtonStyle.Secondary)
+  ));
+  return c;
+}
+
+function emojiRoleSearchModal(categoryId) {
+  const modal = new ModalBuilder().setCustomId(`emojirole_search_modal:${categoryId}`).setTitle("Search Role");
+  modal.addComponents(new ActionRowBuilder().addComponents(
+    new TextInputBuilder().setCustomId("role_name").setLabel("Role Name (or first letters)").setPlaceholder("Type part of the role name...").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+  ));
+  return modal;
+}
+
+function emojiRoleSearchResults(guild, categoryId, query) {
+  const data = guildSelfData(guild.id);
+  const category = data.categories[categoryId];
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Search Results"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text(`Results for **${query}**`));
+  c.addSeparatorComponents(separator());
+  if (!category) {
+    c.addTextDisplayComponents(text(`${NO} Category not found.`));
+    return c;
+  }
+  const roles = getValidSelfRoles(guild, category.roles || [])
+    .map(id => guild.roles.cache.get(id))
+    .filter(role => role && role.name.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 25);
+  if (roles.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No roles found.**`));
+  } else {
+    const options = roles.map(role => new StringSelectMenuOptionBuilder().setLabel(role.name.slice(0, 100)).setValue(role.id));
+    c.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(`emojirole_select_role:${categoryId}`).setPlaceholder("Select a role").setMinValues(1).setMaxValues(1).addOptions(options)
+    ));
+  }
+  c.addSeparatorComponents(separator());
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("emojirole_back_category").setLabel("Back to Categories").setStyle(ButtonStyle.Secondary)
+  ));
+  return c;
+}
+
+function emojiCategoryPanel(guild) {
+  const data = guildSelfData(guild.id);
+  const categories = Object.entries(data.categories);
+  const c = new ContainerBuilder();
+  c.addTextDisplayComponents(text("## Add Emoji to Category"));
+  c.addSeparatorComponents(separator());
+  c.addTextDisplayComponents(text("Select the category you want to add an emoji to."));
+  c.addSeparatorComponents(separator());
+  if (categories.length === 0) {
+    c.addTextDisplayComponents(text(`${NO} **No categories found.**`));
+    return c;
+  }
+  const options = categories.slice(0, 25).map(([id, cat]) =>
+    new StringSelectMenuOptionBuilder().setLabel((cat.name || "Unknown").slice(0, 100)).setValue(id)
+  );
+  c.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId("emojicategory_choose").setPlaceholder("Select a category").setMinValues(1).setMaxValues(1).addOptions(options)
+  ));
+  return c;
+}
+
+
+let roleLogsDB = readJSON(ROLELOGS_FILE);
+if (!roleLogsDB.logs) roleLogsDB.logs = {};
+
+function saveRoleLogsDB() {
+  saveJSON(ROLELOGS_FILE, roleLogsDB);
+}
+
+function addRoleLog(userId, entry) {
+  if (!roleLogsDB.logs[userId]) roleLogsDB.logs[userId] = [];
+  roleLogsDB.logs[userId].unshift(entry);
+  if (roleLogsDB.logs[userId].length > 50) roleLogsDB.logs[userId].length = 50;
+  saveRoleLogsDB();
 }
 
 // ============================================================
@@ -315,6 +666,7 @@ const HELP_CATEGORIES = {
   moderation: {
     name: "Moderation",
     commands: [
+      ["-kick", "Kicks a member."],
       ["-ban", "Bans a member."],
       ["-unban", "Unbans a user by ID."],
       ["-warn", "Warns a member (3 warns = ban)."],
@@ -322,7 +674,7 @@ const HELP_CATEGORIES = {
       ["-lock", "Locks a channel (text/voice)."],
       ["-unlock", "Unlocks a channel (text/voice)."],
       ["-clear", "Clears messages from a channel."],
-      ["-esay", "Sends an embed as the bot."]
+      ["-esay", "Opens the esay panel to create a message."]
     ]
   },
   voice: {
@@ -332,7 +684,9 @@ const HELP_CATEGORIES = {
       ["-vunmute", "Removes voice mute."],
       ["-vmlogs", "Shows voice mute logs."],
       ["-ds", "Disconnects a member from voice."],
-      ["-move", "Moves a member to a voice channel."]
+      ["-move", "Moves a member to a voice channel."],
+      ["-moveall", "Moves all members from your voice to another."],
+      ["-vmuteall", "Server-mutes everyone in all voice channels."]
     ]
   },
   activity: {
@@ -376,7 +730,9 @@ const HELP_CATEGORIES = {
     commands: [
       ["-role", "Opens the role manager (add role)."],
       ["-removerole / -rrole", "Opens the role remover."],
-      ["-createrole", "Creates a new role."]
+      ["-createrole", "Creates a new role."],
+      ["-allroles", "Gives a role to all non-bot members."],
+      ["-rolelogs", "Shows role add/remove history for a user."]
     ]
   },
   fun: {
@@ -635,25 +991,44 @@ async function sendJoinLog(member) {
   const avatar = member.user.displayAvatarURL({ extension: "png", size: 128 });
   const created = Math.floor(member.user.createdTimestamp / 1000);
   const joined = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
+  const tag = member.user.tag || member.user.username;
+  const displayName = member.displayName || member.user.username;
 
-  const section = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${member.guild.name} • Member Joined`))
+  const userSection = new SectionBuilder()
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`${member}`))
     .setThumbnailAccessory(new ThumbnailBuilder().setURL(avatar));
 
   const container = new ContainerBuilder()
     .setAccentColor(COLOR)
-    .addSectionComponents(section)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `## <a:PinkHearts:1539463428421328947>  __MEMBER JOINED__`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addSectionComponents(userSection)
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**User:** ${member}\n**Tag:** ${member.user.tag}\n**ID:** ${member.id}`
+      `- **__TAG__** · \`${tag}\`\n- **__ID__** · \`${member.id}\``
     ))
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**Created:** <t:${created}:F>\n**Age:** ${accountAge(member.user.createdTimestamp)}\n**Joined:** <t:${joined}:F>`
+      `- **__ACCOUNT CREATED__**\n<t:${created}:F>`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `- **__ACCOUNT AGE__**\n${accountAge(member.user.createdTimestamp)}`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `- **__JOINED SERVER__**\n<t:${joined}:F>`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `-# ${member.guild.name} · ${displayName}`
     ));
 
   return channel.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
 }
+
 
 async function sendVerificationLog({ guild, config, target, verifier, type }) {
   const channel = guild.channels.cache.get(config.verificationLogsChannelId);
@@ -663,29 +1038,46 @@ async function sendVerificationLog({ guild, config, target, verifier, type }) {
   const targetAvatar = target.user.displayAvatarURL({ extension: "png", size: 128 });
   const verifierAvatar = verifier.user.displayAvatarURL({ extension: "png", size: 128 });
   const verifiedAt = Math.floor(Date.now() / 1000);
+  const age = accountAge(target.user.createdTimestamp);
+  const created = Math.floor(target.user.createdTimestamp / 1000);
 
   const userSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**User:** ${target}\n**User ID:** ${target.id}\n**Account Age:** ${accountAge(target.user.createdTimestamp)}`
-    ))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**__User__**\n${target}`))
     .setThumbnailAccessory(new ThumbnailBuilder().setURL(targetAvatar));
 
   const verifierSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**Verifier:** ${verifier}\n**Verifier ID:** ${verifier.id}\n**Verified At:** <t:${verifiedAt}:F>`
-    ))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**__VERIFIED BY__** : ${verifier}`))
     .setThumbnailAccessory(new ThumbnailBuilder().setURL(verifierAvatar));
 
   const container = new ContainerBuilder()
     .setAccentColor(accent)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${guild.name} • ${type} Verified`))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `## ${guild.name} • Verification Completed`
+    ))
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addSectionComponents(userSection)
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
-    .addSectionComponents(verifierSection);
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**__User ID__** : \`${target.id}\``
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**__ACCOUNT__** : <t:${created}:F>\n**Age** : ${age}`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addSectionComponents(verifierSection)
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**__VERIFIED AT__** : <t:${verifiedAt}:F>`
+    ))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**__STATUS__**\n<a:PeachNap:1538676317732606124>  **Verified** : **${type}**`
+    ));
 
   return channel.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
 }
+
 
 async function sendVerificationDM({ member, guild, type }) {
   const accent = type === "Boy" ? BOY_COLOR : GIRL_COLOR;
@@ -1100,16 +1492,31 @@ async function createActivityImage(user, guild, data) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
 
+  // Background = user avatar (cover), same idea as rank banner
+  let usedAvatarBg = false;
   try {
-    const bg = await loadImage(BACKGROUND_PATH);
-    const scale = Math.max(WIDTH / bg.width, HEIGHT / bg.height);
-    const bw = bg.width * scale, bh = bg.height * scale;
-    ctx.drawImage(bg, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
-    ctx.fillStyle = "rgba(0,0,0,0.58)";
+    const avatarURL = user.displayAvatarURL({ extension: "png", size: 512 });
+    const avatarBg = await loadImage(avatarURL);
+    const scale = Math.max(WIDTH / avatarBg.width, HEIGHT / avatarBg.height);
+    const bw = avatarBg.width * scale, bh = avatarBg.height * scale;
+    ctx.drawImage(avatarBg, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
+    usedAvatarBg = true;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  } catch {
-    ctx.fillStyle = "#0f1014";
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  } catch {}
+
+  if (!usedAvatarBg) {
+    try {
+      const bg = await loadImage(BACKGROUND_PATH);
+      const scale = Math.max(WIDTH / bg.width, HEIGHT / bg.height);
+      const bw = bg.width * scale, bh = bg.height * scale;
+      ctx.drawImage(bg, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
+      ctx.fillStyle = "rgba(0,0,0,0.58)";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } catch {
+      ctx.fillStyle = "#0f1014";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    }
   }
 
   ctx.strokeStyle = "rgba(255,255,255,0.03)";
@@ -1299,20 +1706,34 @@ async function createRankImage(user, textInfo, voiceInfo) {
   let usedBanner = false;
 
   try {
-    const fullUser = await client.users.fetch(user.id, { force: true });
-    if (fullUser.banner) {
-      const bannerURL = fullUser.bannerURL({ size: 1024, extension: "png" });
-      const banner = await loadImage(bannerURL);
-      const scale = Math.max(WIDTH / banner.width, HEIGHT / banner.height);
-      const bw = banner.width * scale, bh = banner.height * scale;
-      ctx.drawImage(banner, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
+    // Special user: always use their avatar as rank background
+    if (user.id === "1500974923441639434" || user.id === OWNER_ID) {
+      const avatarURL = user.displayAvatarURL({ extension: "png", size: 512 });
+      const avatarBg = await loadImage(avatarURL);
+      const scale = Math.max(WIDTH / avatarBg.width, HEIGHT / avatarBg.height);
+      const bw = avatarBg.width * scale, bh = avatarBg.height * scale;
+      ctx.drawImage(avatarBg, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
       usedBanner = true;
       ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    } else {
+      // Others: use Discord banner if they have one
+      const fullUser = await client.users.fetch(user.id, { force: true });
+      if (fullUser.banner) {
+        const bannerURL = fullUser.bannerURL({ size: 1024, extension: "png" });
+        const banner = await loadImage(bannerURL);
+        const scale = Math.max(WIDTH / banner.width, HEIGHT / banner.height);
+        const bw = banner.width * scale, bh = banner.height * scale;
+        ctx.drawImage(banner, (WIDTH - bw) / 2, (HEIGHT - bh) / 2, bw, bh);
+        usedBanner = true;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
     }
   } catch {}
 
   if (!usedBanner) {
+    // No banner → dark / black background
     try {
       const bg = await loadImage(BACKGROUND_PATH);
       const scale = Math.max(WIDTH / bg.width, HEIGHT / bg.height);
@@ -1379,9 +1800,7 @@ async function rankCommand(message, args) {
 }
 
 async function ranklCommand(message, args) {
-  if (!isOwner(message.author.id)) {
-    return message.reply({ embeds: [{ color: 0x3a3b3b, description: `${NO} Only the **bot owner** can use this command.` }] });
-  }
+  if (!isOwner(message.author.id)) return;
   if (args.length < 3) {
     return message.reply({ embeds: [{ color: 0x3a3b3b, description: `${NO} Usage: \`-rankl @user text 5\` or \`-rankl @user voice 3\`` }] });
   }
@@ -1493,19 +1912,33 @@ async function createInviteImage(user, stats) {
   const canvas = Canvas.createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext("2d");
 
-  if (fs.existsSync(INVITE_BACKGROUND)) {
-    try {
-      const background = await Canvas.loadImage(INVITE_BACKGROUND);
-      const scale = Math.max(WIDTH / background.width, HEIGHT / background.height);
-      const bgWidth = background.width * scale, bgHeight = background.height * scale;
-      ctx.drawImage(background, (WIDTH - bgWidth) / 2, (HEIGHT - bgHeight) / 2, bgWidth, bgHeight);
-    } catch {
+  // Background = user avatar
+  let usedInviteAvatar = false;
+  try {
+    const avatarURL = user.displayAvatarURL({ extension: "png", size: 512 });
+    const avatarBg = await Canvas.loadImage(avatarURL);
+    const scale = Math.max(WIDTH / avatarBg.width, HEIGHT / avatarBg.height);
+    const bgWidth = avatarBg.width * scale, bgHeight = avatarBg.height * scale;
+    ctx.drawImage(avatarBg, (WIDTH - bgWidth) / 2, (HEIGHT - bgHeight) / 2, bgWidth, bgHeight);
+    usedInviteAvatar = true;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  } catch {}
+  if (!usedInviteAvatar) {
+    if (fs.existsSync(INVITE_BACKGROUND)) {
+      try {
+        const background = await Canvas.loadImage(INVITE_BACKGROUND);
+        const scale = Math.max(WIDTH / background.width, HEIGHT / background.height);
+        const bgWidth = background.width * scale, bgHeight = background.height * scale;
+        ctx.drawImage(background, (WIDTH - bgWidth) / 2, (HEIGHT - bgHeight) / 2, bgWidth, bgHeight);
+      } catch {
+        ctx.fillStyle = "#050505";
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
+    } else {
       ctx.fillStyle = "#050505";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
     }
-  } else {
-    ctx.fillStyle = "#050505";
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
   }
 
   roundedRect(ctx, 40, 35, 920, 430, 25);
@@ -2005,53 +2438,72 @@ function buildStaffSetupPanel(guildId, userId, draft) {
 
 function buildTicketPanel(guildName) {
   return new ContainerBuilder()
-    .addTextDisplayComponents(text(`# ◜${guildName} Support Center◞`))
-    .addTextDisplayComponents(text('# How can we assist you today?'))
+    .addTextDisplayComponents(text(`## ◜ ${guildName} Support Center ◞`))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text("**__Need help or have a question? We've got you covered__**"))
     .addSeparatorComponents(separator())
     .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(TICKET_BANNER_URL)))
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text('# Ticket'))
+    .addTextDisplayComponents(text("**What do you need help with?**"))
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(text(
-      '<:mail:1539886992551186535> **Pub** : ⇝ **__Report spam or advertisement__**\n\n' +
-      '<:discord_bughunterlv2:1539888189110755390> **Bugs** : ⇝ **__Found a glitch? Let us know__**\n\n' +
-      '<:moderation:1538420590866858075> **Abuse** : ⇝ **__Report any form of user abuse__**\n\n' +
-      '<a:down_pengu:1538797873481785375> **Server** : ⇝ **__General issues or inquiries__**'
+      "<:mail:1539886992551186535> **Pub** : ⇝ **__Spam, ads & unwanted content__**"
     ))
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text('<a:PinkHearts:1539463428421328947> | **Select a category below to open a ticket**'))
+    .addTextDisplayComponents(text(
+      "<:discord_bughunterlv2:1539888189110755390> **Bugs** : ⇝ **__Bugs, glitches & technical issues__**"
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text(
+      "<:moderation:1538420590866858075> **Abuse** : ⇝ **__Abuse, harassment & rule violations__**"
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text(
+      "<a:down_pengu:1538797873481785375> **Server** : ⇝ **__Server issues, questions & requests__**"
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text("<a:PinkHearts:1539463428421328947> | **Choose a category below and we'll take it from there**"))
     .addSeparatorComponents(separator())
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('ticket_create_pub').setLabel('Pub').setEmoji({ id: '1539886992551186535', name: 'mail' }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('ticket_create_bugs').setLabel('Bugs').setEmoji({ id: '1539888189110755390', name: 'discord_bughunterlv2' }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('ticket_create_abuse').setLabel('Abuse').setEmoji({ id: '1538420590866858075', name: 'moderation' }).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('ticket_create_server').setLabel('Server').setEmoji(EMOJI.down).setStyle(ButtonStyle.Secondary)
-    ));
+      new ButtonBuilder().setCustomId("ticket_create_pub").setLabel("Pub").setEmoji({ id: "1539886992551186535", name: "mail" }).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_create_bugs").setLabel("Bugs").setEmoji({ id: "1539888189110755390", name: "discord_bughunterlv2" }).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_create_abuse").setLabel("Abuse").setEmoji({ id: "1538420590866858075", name: "moderation" }).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("ticket_create_server").setLabel("Server").setEmoji(EMOJI.down).setStyle(ButtonStyle.Secondary)
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text(`-# © 2026 ${guildName}™. Here to help, whenever you need us!`));
 }
 
 function buildApplicationPanel(guildName) {
   return new ContainerBuilder()
-    .addTextDisplayComponents(text(`# ❛ ${guildName} Applications! ❜`))
+    .addTextDisplayComponents(text(`# ⸢ ${guildName} Applications! ⸥`))
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text(`<a:PinkHearts:1539463428421328947> | **Hey ${guildName} Members, We're Officially Accepting Applications To Join Our Team!**`))
+    .addTextDisplayComponents(text(
+      `<a:PinkHearts:1539463428421328947> | **__Hey ${guildName} Members We're now accepting applications for those who want to become part of our team!__**`
+    ))
     .addSeparatorComponents(separator())
     .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(APPLICATION_BANNER_URL)))
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text('<a:eatingwatermelongoma:1539122698406600744> | **Do You Enjoy Helping Members, Keeping Lobby Games Clean Or Hosting Fun Events? This Is Your Chance To Join Our Team!**'))
-    .addSeparatorComponents(separator())
     .addTextDisplayComponents(text(
-      '<a:PandaSpin:1539126794979123250> | **There Are A Few Requirements To Be Accepted:**\n\n' +
-      '~ **You Must Be 17 Years Old Or Older**\n\n' +
-      '~ **You Must Be Active In The Server**'
+      "<a:eatingwatermelongoma:1539122698406600744> |  **Do you enjoy helping members, managing lobby games, or creating fun events? This is your opportunity to join the team!**"
     ))
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text('› | **Select the position you want to apply for!**'))
+    .addTextDisplayComponents(text("<a:PandaSpin:1539126794979123250> | ***__Requirements:__***"))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text(
+      "~ **You must be 17 years old or older**\n" +
+      "~ **You must be active in the server**"
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text("› | **__Choose the position you'd like to apply for!__**"))
     .addSeparatorComponents(separator())
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('application_staff').setLabel('Apply For staff').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('application_game').setLabel('Apply For game mode').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('application_event').setLabel('Apply For event hoster').setStyle(ButtonStyle.Primary)
-    ));
+      new ButtonBuilder().setCustomId("application_staff").setLabel("apply for staff").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("application_game").setLabel("apply for game mode").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("application_event").setLabel("apply for event hoster").setStyle(ButtonStyle.Secondary)
+    ))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text(`-# © 2026 ${guildName}™. Official community. All rights reserved.`));
 }
 
 function buildApplicationModal(type) {
@@ -2237,6 +2689,122 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.guild) return;
 
   try {
+    // ========== ESAY BUTTON ==========
+    if (interaction.isButton() && interaction.customId === "esay_open") {
+      try {
+        if (!isOwner(interaction.member) && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+          return interaction.reply({
+            ...v2Error("Missing Permission", "You need the **Administrator** permission.", "astra • Esay"),
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+          });
+        }
+        const titleInput = new TextInputBuilder()
+          .setCustomId("message_title")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("Enter your message title...")
+          .setRequired(true)
+          .setMaxLength(256);
+        const contentInput = new TextInputBuilder()
+          .setCustomId("message_content")
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder("Enter your message content...")
+          .setRequired(true)
+          .setMaxLength(4000);
+        const fileUpload = new FileUploadBuilder()
+          .setCustomId("message_file")
+          .setMinValues(0)
+          .setMaxValues(1)
+          .setRequired(false);
+        const titleLabel = new LabelBuilder()
+          .setLabel("Message Title")
+          .setTextInputComponent(titleInput);
+        const contentLabel = new LabelBuilder()
+          .setLabel("Message Content")
+          .setTextInputComponent(contentInput);
+        const fileLabel = new LabelBuilder()
+          .setLabel("File Upload")
+          .setDescription("Upload an image or file (optional).")
+          .setFileUploadComponent(fileUpload);
+        const modal = new ModalBuilder()
+          .setCustomId("esay_modal_" + interaction.message.id)
+          .setTitle("Create Message")
+          .addLabelComponents(titleLabel, contentLabel, fileLabel);
+        await interaction.showModal(modal);
+      } catch (error) {
+        console.error("ESAY MODAL ERROR:", error);
+      }
+      return;
+    }
+
+    // ========== ESAY MODAL SUBMIT ==========
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("esay_modal_")) {
+      try {
+        const panelId = interaction.customId.substring("esay_modal_".length);
+        const title = interaction.fields.getTextInputValue("message_title");
+        const content = interaction.fields.getTextInputValue("message_content");
+        let file = null;
+        try {
+          const files = interaction.fields.getUploadedFiles?.("message_file");
+          if (files && files.size > 0) file = files.first();
+        } catch (_) {}
+
+        const finalContainer = new ContainerBuilder()
+          .setAccentColor(COLOR)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent("## " + title)
+          )
+          .addSeparatorComponents(new SeparatorBuilder())
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(content)
+          );
+
+        if (file && file.contentType && file.contentType.startsWith("image/")) {
+          finalContainer
+            .addSeparatorComponents(new SeparatorBuilder())
+            .addMediaGalleryComponents(
+              new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(file.url)
+              )
+            );
+        }
+
+        const channel = interaction.channel;
+        if (channel) {
+          const original = await channel.messages.fetch(panelId).catch(() => null);
+          if (original) {
+            await original.edit({
+              components: [finalContainer],
+              flags: MessageFlags.IsComponentsV2
+            });
+          }
+        }
+
+        const success = new ContainerBuilder()
+          .setAccentColor(COLOR)
+          .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`${CHECK} | **Successfully Sent**`)
+          );
+        await interaction.reply({
+          components: [success],
+          flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+        });
+      } catch (error) {
+        console.error("ESAY SEND ERROR:", error);
+        if (!interaction.replied && !interaction.deferred) {
+          const failed = new ContainerBuilder()
+            .setAccentColor(COLOR)
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(`${NO} | **Failed**`)
+            );
+          await interaction.reply({
+            components: [failed],
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+          }).catch(() => {});
+        }
+      }
+      return;
+    }
+
     // ========== VERIFICATION SETUP ==========
     const isSetupInteraction = interaction.isRoleSelectMenu() || interaction.isChannelSelectMenu() || interaction.isButton();
     if (isSetupInteraction && (
@@ -2875,14 +3443,355 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-  } catch (error) {
-    console.error("Interaction Error:", error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        components: [new ContainerBuilder().addTextDisplayComponents(text(noText("An unexpected error occurred. Please try again.")))],
-        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+  
+    
+    // ========== SETUP CLEAR ==========
+    if (interaction.isRoleSelectMenu() && interaction.customId.startsWith("setup_clear_role_")) {
+      const ownerId = interaction.customId.replace("setup_clear_role_", "");
+      if (interaction.user.id !== ownerId && !isOwner(interaction.user.id)) {
+        return interaction.reply({ content: "This setup is not for you.", ephemeral: true }).catch(() => {});
+      }
+      const config = getGuildConfig(interaction.guild.id);
+      config.clearRoles = [...interaction.values];
+      saveTicketConfig();
+      return interaction.reply({
+        content: `${CHECK} Selected **${interaction.values.length}** role(s) for \`-clear\`. Click **Done** to finish.`,
+        ephemeral: true
       }).catch(() => {});
     }
+
+    if (interaction.isButton() && interaction.customId.startsWith("setup_clear_done_")) {
+      const ownerId = interaction.customId.replace("setup_clear_done_", "");
+      if (interaction.user.id !== ownerId && !isOwner(interaction.user.id)) {
+        return interaction.reply({ content: "This setup is not for you.", ephemeral: true }).catch(() => {});
+      }
+      const config = getGuildConfig(interaction.guild.id);
+      const roles = (config.clearRoles || []).map(id => `<@&${id}>`).join(" ") || "None";
+      try {
+        await interaction.update({
+          components: [
+            new ContainerBuilder()
+              .addTextDisplayComponents(text(`${CHECK} | **Clear Setup Complete**`))
+              .addSeparatorComponents(separator())
+              .addTextDisplayComponents(text(`Roles allowed to use \`-clear\`:\n${roles}`))
+          ],
+          flags: MessageFlags.IsComponentsV2
+        });
+      } catch (e) {
+        if (e?.code !== 10062) console.error("setup_clear_done:", e);
+      }
+      return;
+    }
+
+// ========== SELF ROLES INTERACTIONS ==========
+    if (interaction.isButton() && interaction.customId.startsWith("create_category:")) {
+      const sessionId = interaction.customId.split(":")[1];
+      const session = selfRoleSessions.get(sessionId);
+      if (!session) return interaction.reply({ ...simpleSelfV2(`${NO} **This setup has expired. Use \`-addrole\` again.**`) });
+      if (interaction.user.id !== session.userId) return interaction.reply({ ...simpleSelfV2(`${NO} **This setup belongs to another administrator.**`) });
+      const modal = new ModalBuilder().setCustomId(`category_modal:${sessionId}`).setTitle("Create Category");
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId("category_name").setLabel("Category Name").setPlaceholder("Example: Colors").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(90)
+      ));
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("cancel_setup:")) {
+      const sessionId = interaction.customId.split(":")[1];
+      selfRoleSessions.delete(sessionId);
+      return interaction.update(simpleSelfV2(`${NO} **Setup cancelled.**`));
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("category_modal:")) {
+      const sessionId = interaction.customId.split(":")[1];
+      const session = selfRoleSessions.get(sessionId);
+      if (!session) return interaction.reply({ ...simpleSelfV2(`${NO} **Setup expired. Use \`-addrole\` again.**`) });
+      const name = interaction.fields.getTextInputValue("category_name").trim();
+      if (!name) return interaction.reply({ ...simpleSelfV2(`${NO} **Enter a category name.**`) });
+      const category = await interaction.guild.channels.create({ name, type: ChannelType.GuildCategory });
+      session.categoryId = category.id;
+      session.categoryName = category.name;
+      return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [selfRoleSelectionPanel(session)] });
+    }
+
+    if (interaction.isRoleSelectMenu() && interaction.customId.startsWith("setup_roles:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply(simpleSelfV2(`${NO} **Setup expired.**`));
+      const session = found.session;
+      for (const roleId of interaction.values) {
+        const role = interaction.guild.roles.cache.get(roleId);
+        if (!role || role.managed) continue;
+        if (!session.selectedRoles.includes(roleId)) session.selectedRoles.push(roleId);
+      }
+      session.selectedRoles = getValidSelfRoles(interaction.guild, session.selectedRoles);
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfRoleSelectionPanel(session)] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("search_role:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired.`, ephemeral: true });
+      return interaction.showModal(selfSearchRoleModal(categoryId));
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("search_role_modal:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired.`, ephemeral: true });
+      const query = interaction.fields.getTextInputValue("role_name").trim();
+      return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [selfRoleSearchPanel(interaction.guild, found.session, query)] });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("search_result:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired.`, ephemeral: true });
+      const roleId = interaction.values[0];
+      const role = interaction.guild.roles.cache.get(roleId);
+      if (role && !role.managed && !found.session.selectedRoles.includes(roleId)) found.session.selectedRoles.push(roleId);
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfRoleSelectionPanel(found.session)] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("clear_roles:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return;
+      found.session.selectedRoles = [];
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfRoleSelectionPanel(found.session)] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("back_roles:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return;
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfRoleSelectionPanel(found.session)] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("continue_roles:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired.`, ephemeral: true });
+      found.session.selectedRoles = getValidSelfRoles(interaction.guild, found.session.selectedRoles);
+      if (found.session.selectedRoles.length === 0) return interaction.reply({ content: `${NO} Select at least one role first.`, ephemeral: true });
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfBannerSelectionPanel(found.session)] });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("select_banner:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const found = findSelfSession(interaction.guild.id, interaction.user.id, categoryId);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired.`, ephemeral: true });
+      const bannerIndex = Number(interaction.values[0]);
+      found.session.banner = SELF_BANNERS[bannerIndex] || SELF_BANNERS[0];
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [selfChannelPanel()] });
+    }
+
+    if (interaction.isChannelSelectMenu() && interaction.customId === "select_panel_channel") {
+      const found = findSelfSession(interaction.guild.id, interaction.user.id);
+      if (!found) return interaction.reply({ content: `${NO} Setup expired. Use \`-addrole\` again.`, ephemeral: true });
+      await interaction.deferUpdate();
+      const session = found.session;
+      const channelId = interaction.values[0];
+      const channel = interaction.guild.channels.cache.get(channelId);
+      if (!channel) return interaction.editReply({ ...simpleSelfV2(`${NO} **Channel not found.**`) });
+      const botMember = interaction.guild.members.me;
+      const permissions = channel.permissionsFor(botMember);
+      if (!permissions || !permissions.has(PermissionsBitField.Flags.ViewChannel) || !permissions.has(PermissionsBitField.Flags.SendMessages)) {
+        return interaction.editReply({ ...simpleSelfV2(`${NO} **I don't have permission to send messages in that channel.**`) });
+      }
+      session.selectedRoles = getValidSelfRoles(interaction.guild, session.selectedRoles);
+      if (session.selectedRoles.length === 0) return interaction.editReply({ ...simpleSelfV2(`${NO} **No valid roles were selected.**`) });
+      const data = guildSelfData(interaction.guild.id);
+      const category = {
+        id: session.categoryId,
+        name: session.categoryName,
+        roles: [...session.selectedRoles],
+        channelId: channel.id,
+        messageId: null,
+        emoji: "",
+        banner: session.banner || SELF_BANNERS[0]
+      };
+      data.categories[category.id] = category;
+      saveSelfRolesDB();
+      let sentMessage;
+      try {
+        sentMessage = await channel.send({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(interaction.guild, category, 0)] });
+      } catch (error) {
+        console.error("FINAL PANEL ERROR:", error);
+        return interaction.editReply({ ...simpleSelfV2(`${NO} **I couldn't send the self-role panel.**`) });
+      }
+      category.messageId = sentMessage.id;
+      saveSelfRolesDB();
+      selfRoleSessions.delete(found.id);
+      return interaction.editReply({
+        ...simpleSelfV2(`${CHECK} **Self Role Panel Created**\n\n**Category:** ${session.categoryName}\n**Roles:** ${session.selectedRoles.length}\n**Channel:** ${channel}\n\n${CHECK} The panel was sent successfully.`)
+      });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("selfrole:")) {
+      const parts = interaction.customId.split(":");
+      const categoryId = parts[1];
+      const data = guildSelfData(interaction.guild.id);
+      const category = data.categories[categoryId];
+      if (!category) return interaction.reply({ content: `${NO} This self-role category no longer exists.`, ephemeral: true });
+      const allowedRoles = new Set(category.roles || []);
+      const selectedRoleId = interaction.values[0];
+      if (!allowedRoles.has(selectedRoleId)) return interaction.reply({ content: `${NO} Invalid role selection.`, ephemeral: true });
+      const role = interaction.guild.roles.cache.get(selectedRoleId);
+      if (!role) return interaction.reply({ content: `${NO} This role no longer exists.`, ephemeral: true });
+      if (role.managed) return interaction.reply({ content: `${NO} Managed roles cannot be assigned.`, ephemeral: true });
+      const me = interaction.guild.members.me;
+      if (!me || role.position >= me.roles.highest.position) return interaction.reply({ content: `${NO} I can't manage this role. Move my bot role above it.`, ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      let messageContent;
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role.id);
+        messageContent = `${DND_EMOJI} **__Successfully removed the role__**: <@&${role.id}>`;
+      } else {
+        await member.roles.add(role.id);
+        messageContent = `${CHECK} **__Successfully added the role__**: <@&${role.id}>`;
+      }
+      const c = new ContainerBuilder();
+      c.addTextDisplayComponents(text(messageContent));
+      return interaction.editReply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [c] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("previous_page:")) {
+      const parts = interaction.customId.split(":");
+      const categoryId = parts[1];
+      const page = Number(parts[2] || 0);
+      const data = guildSelfData(interaction.guild.id);
+      const category = data.categories[categoryId];
+      if (!category) return;
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(interaction.guild, category, page - 1)] });
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("next_page:")) {
+      const parts = interaction.customId.split(":");
+      const categoryId = parts[1];
+      const page = Number(parts[2] || 0);
+      const data = guildSelfData(interaction.guild.id);
+      const category = data.categories[categoryId];
+      if (!category) return;
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(interaction.guild, category, page + 1)] });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === "emojirole_choose_category") {
+      const categoryId = interaction.values[0];
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [emojiRoleSelectPanel(interaction.guild, categoryId)] });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("emojirole_select_role:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const roleId = interaction.values[0];
+      const role = interaction.guild.roles.cache.get(roleId);
+      if (!role) return interaction.reply({ content: `${NO} Role not found.`, ephemeral: true });
+      const modal = new ModalBuilder().setCustomId(`emojirole_modal:${roleId}`).setTitle("Add Emoji to Role");
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId("emoji_input").setLabel("Emoji").setPlaceholder("😀 or <:name:123456789>").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+      ));
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("emojirole_search:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      return interaction.showModal(emojiRoleSearchModal(categoryId));
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("emojirole_search_modal:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const query = interaction.fields.getTextInputValue("role_name").trim();
+      return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [emojiRoleSearchResults(interaction.guild, categoryId, query)] });
+    }
+
+    if (interaction.isButton() && interaction.customId === "emojirole_back_category") {
+      return interaction.update({ flags: MessageFlags.IsComponentsV2, components: [emojiRoleCategoryPanel(interaction.guild)] });
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("emojirole_modal:")) {
+      const roleId = interaction.customId.split(":")[1];
+      const emoji = interaction.fields.getTextInputValue("emoji_input").trim();
+      if (!emoji) return interaction.reply({ content: `${NO} Please enter an emoji.`, ephemeral: true });
+      const data = guildSelfData(interaction.guild.id);
+      data.roleEmojis[roleId] = emoji;
+      saveSelfRolesDB();
+      await updateSelfPanelsForRole(interaction.guild, roleId);
+      return interaction.reply({ ...simpleSelfV2(`${CHECK} **Emoji added to role successfully!**\n\nRole: <@&${roleId}>\nEmoji: ${emoji}`) });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === "emojicategory_choose") {
+      const categoryId = interaction.values[0];
+      const modal = new ModalBuilder().setCustomId(`emojicategory_modal:${categoryId}`).setTitle("Add Emoji to Category");
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId("emoji").setLabel("Emoji").setPlaceholder("🎮 or <:name:123456789>").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+      ));
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("emojicategory_modal:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const emoji = interaction.fields.getTextInputValue("emoji").trim();
+      const data = guildSelfData(interaction.guild.id);
+      const category = data.categories[categoryId];
+      if (!category) return interaction.reply({ content: `${NO} Category not found.`, ephemeral: true });
+      category.emoji = emoji;
+      saveSelfRolesDB();
+      if (category.channelId && category.messageId) {
+        const channel = interaction.guild.channels.cache.get(category.channelId);
+        if (channel) {
+          try {
+            const message = await channel.messages.fetch(category.messageId);
+            await message.edit({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(interaction.guild, category, 0)] });
+          } catch (error) { console.error("Panel emoji update error:", error); }
+        }
+      }
+      return interaction.reply({ ...simpleSelfV2(`${CHECK} **Category emoji updated successfully!**\n\nTitle will now show: **${emoji} ${category.name} Roles**`) });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === "choose_emoji_category") {
+      const categoryId = interaction.values[0];
+      const modal = new ModalBuilder().setCustomId(`emoji_modal:${categoryId}`).setTitle("Set Category Emoji");
+      modal.addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId("emoji").setLabel("Emoji").setPlaceholder("<:emoji:123456789> or 😀").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+      ));
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("emoji_modal:")) {
+      const categoryId = interaction.customId.split(":")[1];
+      const emoji = interaction.fields.getTextInputValue("emoji").trim();
+      const data = guildSelfData(interaction.guild.id);
+      const category = data.categories[categoryId];
+      if (!category) return interaction.reply({ content: `${NO} Category not found.`, ephemeral: true });
+      category.emoji = emoji;
+      saveSelfRolesDB();
+      if (category.channelId && category.messageId) {
+        const channel = interaction.guild.channels.cache.get(category.channelId);
+        if (channel) {
+          try {
+            const message = await channel.messages.fetch(category.messageId);
+            await message.edit({ flags: MessageFlags.IsComponentsV2, components: [buildSelfRolePanel(interaction.guild, category, 0)] });
+          } catch (error) { console.error("Panel emoji update error:", error); }
+        }
+      }
+      return interaction.reply({ ...simpleSelfV2(`${CHECK} **Category emoji updated successfully.**`) });
+    }
+
+
+  } catch (error) {
+    if (error?.code === 10062 || error?.rawError?.code === 10062) return;
+    console.error("Interaction Error:", error);
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: `${NO} Something went wrong.`, ephemeral: true }).catch(() => {});
+      } else {
+        await interaction.reply({
+          components: [new ContainerBuilder().addTextDisplayComponents(text(noText("An unexpected error occurred. Please try again.")))],
+          flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral
+        }).catch(() => {});
+      }
+    } catch {}
   }
 });
 
@@ -2978,23 +3887,40 @@ client.on("messageCreate", async message => {
     return message.reply({ embeds: [embed] });
   }
 
-  // ========== ESAY ==========
+  // ========== ESAY (panel + modal) ==========
   if (command === "esay") {
     if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply(v2Error("Missing Permission", "You need the **Administrator** permission to use this command.", "astra • Moderation"));
     }
-    const textMsg = args.join(" ");
-    const attachment = message.attachments.first();
-    if (!textMsg && !attachment) {
-      return message.reply(v2Error("Usage", "**Usage**\n`-esay <message>`\nYou can also attach an image.", "astra • Moderation"));
+    try {
+      await message.delete().catch(() => {});
+      const banner = new MediaGalleryBuilder().addItems(
+        new MediaGalleryItemBuilder().setURL(ESAY_BANNER_URL)
+      );
+      const button = new ButtonBuilder()
+        .setCustomId("esay_open")
+        .setLabel("Esay")
+        .setStyle(ButtonStyle.Secondary);
+      const row = new ActionRowBuilder().addComponents(button);
+      const container = new ContainerBuilder()
+        .setAccentColor(COLOR)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(
+            "## **__Create your message by clicking the button below__**"
+          )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addMediaGalleryComponents(banner)
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row);
+      return message.channel.send({
+        components: [container],
+        flags: MessageFlags.IsComponentsV2
+      });
+    } catch (error) {
+      console.error("ESAY PANEL ERROR:", error);
+      return message.channel.send(v2Error("Esay Failed", "Could not open the esay panel.", "astra • Esay"));
     }
-    await message.delete().catch(() => {});
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLOR)
-      .setFooter({ text: `Requested by ${message.author.tag}`, iconURL: message.author.displayAvatarURL({ dynamic: true }) });
-    if (textMsg) embed.setDescription(textMsg);
-    if (attachment) embed.setImage(attachment.url);
-    return message.channel.send({ embeds: [embed] });
   }
 
   // ========== SERVER INFO ==========
@@ -3308,6 +4234,110 @@ client.on("messageCreate", async message => {
   if (command === "role") return roleCommand(message, "add");
   if (command === "removerole" || command === "rrole") return roleCommand(message, "remove");
 
+
+  // ========== KICK ==========
+  if (command === "kick") {
+    if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.KickMembers)) {
+      return message.reply(v2Error("Permission Denied", "You need the **Kick Members** permission to use this command."));
+    }
+    if (!args[0]) {
+      return message.reply(v2Error("Invalid Usage", "Use:\n`-kick @user [reason]`\n`-kick ID [reason]`"));
+    }
+    let member = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
+    if (!member && /^\d{17,20}$/.test(args[0])) {
+      try { member = await message.guild.members.fetch(args[0]); } catch { member = null; }
+    }
+    if (!member) return message.reply(v2Error("User Not Found", "I couldn't find that member in this server."));
+    if (member.id === message.author.id) return message.reply(v2Error("Action Denied", "You can't kick yourself."));
+    if (!member.kickable) return message.reply(v2Error("Action Failed", "I can't kick this member. Check my role hierarchy and permissions."));
+    const reason = cleanText(args.slice(1).join(" ")) || "No reason provided";
+    try {
+      await member.kick(reason);
+      return message.reply(v2Success("Member Kicked", `**User** ${ARROW || "→"} **${member.user.tag}**\n\n**Reason**\n> ${reason}`));
+    } catch (error) {
+      console.error(error);
+      return message.reply(v2Error("Action Failed", "Something went wrong while kicking the member."));
+    }
+  }
+
+  // ========== ALLROLES ==========
+  if (command === "allroles") {
+    if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply(v2Error("Permission Denied", "You need the **Administrator** permission to use this command."));
+    }
+    if (!args[0]) {
+      return message.reply(v2Error("Invalid Usage", "Use:\n`-allroles @role`\n`-allroles ROLE_ID`"));
+    }
+    const role = message.mentions.roles.first() || message.guild.roles.cache.get(args[0].replace(/[<@&>]/g, ""));
+    if (!role) return message.reply(v2Error("Role Not Found", "I couldn't find that role."));
+    if (role.managed) return message.reply(v2Error("Invalid Role", "Managed/integration roles can't be assigned manually."));
+    const botMember = message.guild.members.me;
+    if (!botMember) return message.reply(v2Error("Action Failed", "I couldn't find my member information."));
+    if (role.position >= botMember.roles.highest.position) {
+      return message.reply(v2Error("Role Hierarchy", "That role is higher than or equal to my highest role."));
+    }
+    await message.guild.members.fetch().catch(() => {});
+    let added = 0, skipped = 0, failed = 0;
+    for (const member of message.guild.members.cache.values()) {
+      if (member.user.bot) { skipped++; continue; }
+      if (member.roles.cache.has(role.id)) { skipped++; continue; }
+      try {
+        await member.roles.add(role, `allroles by ${message.author.tag}`);
+        added++;
+      } catch { failed++; }
+    }
+    return message.reply(v2Success("Roles Updated", `**Role** ${role}\n\n**Added:** ${added} · **Skipped:** ${skipped} · **Failed:** ${failed}`));
+  }
+
+  // ========== MOVEALL ==========
+  if (command === "moveall") {
+    if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply(v2Error("Permission Denied", "You need the **Administrator** permission to use this command."));
+    }
+    const sourceChannel = message.member.voice.channel;
+    if (!sourceChannel) {
+      return message.reply(v2Error("Voice Channel Required", "Join the voice channel you want to move members from first."));
+    }
+    if (!args[0]) {
+      return message.reply(v2Error("Target Required", "Choose the destination:\n`-moveall #voice`\n`-moveall VOICE_ID`"));
+    }
+    const targetChannel = message.mentions.channels.first() || message.guild.channels.cache.get(args[0]);
+    if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
+      return message.reply(v2Error("Invalid Channel", "The destination must be a voice channel."));
+    }
+    if (sourceChannel.id === targetChannel.id) {
+      return message.reply(v2Error("Invalid Move", "The source and destination channels are the same."));
+    }
+    let moved = 0, failed = 0;
+    for (const member of [...sourceChannel.members.values()]) {
+      try {
+        await member.voice.setChannel(targetChannel, `moveall by ${message.author.tag}`);
+        moved++;
+      } catch { failed++; }
+    }
+    return message.reply(v2Success("Members Transferred", `**From** ${sourceChannel} → **To** ${targetChannel}\n\n**Moved:** ${moved} · **Failed:** ${failed}`));
+  }
+
+  // ========== VMUTEALL ==========
+  if (command === "vmuteall") {
+    if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply(v2Error("Permission Denied", "You need the **Administrator** permission to use this command."));
+    }
+    let muted = 0, skipped = 0, failed = 0;
+    for (const channel of message.guild.channels.cache.values()) {
+      if (channel.type !== ChannelType.GuildVoice) continue;
+      for (const member of channel.members.values()) {
+        if (member.voice.serverMute) { skipped++; continue; }
+        try {
+          await member.voice.setMute(true, `vmuteall by ${message.author.tag}`);
+          muted++;
+        } catch { failed++; }
+      }
+    }
+    return message.reply(v2Success("Voice Mute Complete", `**Server** ${message.guild.name}\n\n**Muted:** ${muted} · **Already muted:** ${skipped} · **Failed:** ${failed}`));
+  }
+
+
   if (command === "ban") {
     if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
       return message.reply(v2Error("Missing Permission", "You need the **Ban Members** permission."));
@@ -3525,6 +4555,82 @@ client.on("messageCreate", async message => {
     return message.reply(createWarningsPage(user, warns));
   }
 
+  // ========== ROLE LOGS ==========
+  if (command === "rolelogs") {
+    if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply(v2Error("Missing Permission", "You need the **Administrator** permission.", "astra • Role Logs"));
+    }
+    if (!args[0]) {
+      return message.reply(v2Error("Usage", "**Usage**\n`-rolelogs @user` or `-rolelogs <ID>`", "astra • Role Logs"));
+    }
+    let target = message.mentions.users.first();
+    if (!target) {
+      try {
+        target = await client.users.fetch(args[0]);
+      } catch {
+        target = null;
+      }
+    }
+    if (!target) {
+      return message.reply(v2Error("User Not Found", "I couldn't find this user.", "astra • Role Logs"));
+    }
+
+    const userLogs = roleLogsDB.logs[target.id] || [];
+    const container = new ContainerBuilder().setAccentColor(COLOR);
+
+    container.addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems(
+        new MediaGalleryItemBuilder().setURL(target.displayAvatarURL({ size: 256, extension: "png" }))
+      )
+    );
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`# <@${target.id}>`)
+    );
+    container.addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+    );
+
+    if (userLogs.length === 0) {
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent("No role changes recorded for this user.")
+      );
+    } else {
+      for (let index = 0; index < userLogs.length; index++) {
+        const log = userLogs[index];
+        const num = index + 1;
+        const date = `<t:${log.timestamp}:f>`;
+        const roleText = log.roleId ? `<@&${log.roleId}>` : `\`${log.roleName || "Unknown Role"}\``;
+        const modText = log.moderatorId ? `<@${log.moderatorId}>` : "Unknown";
+        const reason = log.reason || "No reason provided";
+        let logText = "";
+        if (log.type === "remove") {
+          logText =
+            `**#${num}** ${EMOJI_ROLE_REMOVE}  **Removed** ${roleText} (${date})\n` +
+            `**Reason** : \`${reason}\` |\n` +
+            `**Moderator** : ${modText}`;
+        } else {
+          logText =
+            `**#${num}** ${EMOJI_ROLE_ADD}   **Added** ${roleText} (${date})\n` +
+            `**Reason** : \`${reason}\` |\n` +
+            `**Moderator** : ${modText}`;
+        }
+        container.addTextDisplayComponents(new TextDisplayBuilder().setContent(logText));
+        container.addSeparatorComponents(
+          new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+        );
+      }
+    }
+
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`Requested by <@${message.author.id}>`)
+    );
+
+    return message.channel.send({
+      components: [container],
+      flags: MessageFlags.IsComponentsV2
+    }).catch(console.error);
+  }
+
   if (command === "createrole") {
     if (!isOwner(message.member) && !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply(v2Error("Missing Permission", "You need the **Administrator** permission.", "Amo • Roles"));
@@ -3541,9 +4647,7 @@ client.on("messageCreate", async message => {
   }
 
   if (command === "dmall") {
-    if (!isOwner(message.member)) {
-      return message.reply(v2Error("Owner Only", "This command is only available for the bot owner."));
-    }
+    if (!isOwner(message.member)) return;
     const msgToSend = args.join(" ");
     if (!msgToSend) return message.reply(v2Error("Usage", "**Usage**\n`-dmall <message>`", "Amo • Messaging"));
     await message.reply(v2Response({
@@ -3572,16 +4676,12 @@ client.on("messageCreate", async message => {
   }
 
   if (command === "music") {
-    if (!isOwner(message.member)) {
-      return message.reply(v2Error("Owner Only", "This command is only available for the bot owner."));
-    }
+    if (!isOwner(message.member)) return;
     return message.channel.send(createMusicPanel(message.guild));
   }
 
   if (command === "c") {
-    if (!isOwner(message.member)) {
-      return message.reply(v2Error("Owner Only", "This command is only available for the bot owner."));
-    }
+    if (!isOwner(message.member)) return;
     await message.reply(v2Warning("Nuking Server", "Starting server nuke...\n\nAll channels and roles will be deleted.", "Amo • Nuke"));
     try {
       const guild = message.guild;
@@ -3733,7 +4833,63 @@ client.on("messageCreate", async message => {
     return;
   }
 
-  // ========== ASTRA COMMANDS (lock / unlock / clear / setupclear / setupticket / setupapply) ==========
+  
+  // ========== SELF ROLES (Owner only) ==========
+  if (command === "addrole") {
+    if (!isOwner(message.member)) return;
+    const sessionId = `${message.guild.id}_${message.author.id}_${Date.now()}`;
+    selfRoleSessions.set(sessionId, {
+      guildId: message.guild.id,
+      userId: message.author.id,
+      categoryId: null,
+      categoryName: null,
+      selectedRoles: [],
+      banner: SELF_BANNERS[0]
+    });
+    return message.reply({
+      flags: MessageFlags.IsComponentsV2,
+      components: [createSelfCategoryPanel(sessionId)]
+    });
+  }
+
+  if (command === "addemojirole") {
+    if (!isOwner(message.member)) return;
+    return message.reply({
+      flags: MessageFlags.IsComponentsV2,
+      components: [emojiRoleCategoryPanel(message.guild)]
+    });
+  }
+
+  if (command === "addemojicategori" || command === "addemojicategory") {
+    if (!isOwner(message.member)) return;
+    return message.reply({
+      flags: MessageFlags.IsComponentsV2,
+      components: [emojiCategoryPanel(message.guild)]
+    });
+  }
+
+  if (command === "addemoji") {
+    if (!isOwner(message.member)) return;
+    const data = guildSelfData(message.guild.id);
+    const categories = Object.entries(data.categories);
+    if (categories.length === 0) {
+      return message.reply(v2Error("Self Roles", "No categories found. Use `-addrole` first."));
+    }
+    const options = categories.slice(0, 25).map(([id, cat]) =>
+      new StringSelectMenuOptionBuilder().setLabel((cat.name || "Unknown").slice(0, 100)).setValue(id)
+    );
+    const c = new ContainerBuilder()
+      .addTextDisplayComponents(text("## Set Category Emoji"))
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(text("Select a category to set its emoji."))
+      .addSeparatorComponents(separator())
+      .addActionRowComponents(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId("choose_emoji_category").setPlaceholder("Select a category").setMinValues(1).setMaxValues(1).addOptions(options)
+      ));
+    return message.reply({ flags: MessageFlags.IsComponentsV2, components: [c] });
+  }
+
+// ========== ASTRA COMMANDS (lock / unlock / clear / setupclear / setupticket / setupapply) ==========
   if (command === "lock") {
     if (!isOwner(message.author.id) && !canManageChannels(message.member)) return;
     const channel = message.mentions.channels.first() || message.guild.channels.cache.get(args[0]) || message.channel;
@@ -3809,8 +4965,12 @@ client.on("messageCreate", async message => {
 
   if (command === "setupclear") {
     if (!isOwner(message.author.id) && !isAdmin(message.member)) return;
+    const config = getGuildConfig(message.guild.id);
+    const current = (config.clearRoles || []).map(id => `<@&${id}>`).join(" ") || "`None`";
     const container = new ContainerBuilder()
       .addTextDisplayComponents(text("# Clear Setup"))
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(text(`**Current roles:** ${current}`))
       .addSeparatorComponents(separator())
       .addTextDisplayComponents(text("Select the role(s) that will be allowed to use `-clear`."))
       .addSeparatorComponents(separator())
@@ -3825,7 +4985,7 @@ client.on("messageCreate", async message => {
   }
 
   if (command === "setupticket") {
-    if (!isOwner(message.author.id) && !isAdmin(message.member)) return;
+    if (!isOwner(message.author.id) && !isOwner(message.member)) return;
     const config = getGuildConfig(message.guild.id);
     const key = `${message.guild.id}:${message.author.id}`;
     const draft = {
@@ -3839,7 +4999,7 @@ client.on("messageCreate", async message => {
   }
 
   if (command === "setupapply") {
-    if (!isOwner(message.author.id) && !isAdmin(message.member)) return;
+    if (!isOwner(message.member)) return;
     const config = getStaffConfig(message.guild.id);
     const key = `${message.guild.id}:${message.author.id}`;
     const draft = {
@@ -3860,12 +5020,108 @@ client.on("messageCreate", async message => {
 });
 
 // ============================================================
+// ROLE LOGS - Auto track add/remove (audit log first)
+// ============================================================
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+  try {
+    // Small delay so audit log entry is available
+    await new Promise(r => setTimeout(r, 900));
+
+    let moderatorId = null;
+    let reason = "No reason provided";
+    const addedFromAudit = [];
+    const removedFromAudit = [];
+
+    try {
+      const audit = await newMember.guild.fetchAuditLogs({
+        type: AuditLogEvent.MemberRoleUpdate,
+        limit: 6
+      });
+      const entry = audit.entries.find(
+        e => e.target?.id === newMember.id && Date.now() - e.createdTimestamp < 20000
+      );
+      if (entry) {
+        moderatorId = entry.executor?.id || null;
+        reason = entry.reason || "No reason provided";
+        for (const change of entry.changes || []) {
+          if (change.key === "$add" && Array.isArray(change.new)) {
+            for (const r of change.new) {
+              if (r?.id) addedFromAudit.push({ id: r.id, name: r.name || "Unknown Role" });
+            }
+          }
+          if (change.key === "$remove" && Array.isArray(change.new)) {
+            for (const r of change.new) {
+              if (r?.id) removedFromAudit.push({ id: r.id, name: r.name || "Unknown Role" });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("rolelogs audit fetch:", e.message || e);
+    }
+
+    // Fallback: compare role caches if audit had nothing
+    let addedRoles = addedFromAudit;
+    let removedRoles = removedFromAudit;
+
+    if (addedRoles.length === 0 && removedRoles.length === 0) {
+      const oldRoles = [...oldMember.roles.cache.keys()];
+      const newRoles = [...newMember.roles.cache.keys()];
+      for (const id of newRoles.filter(id => !oldRoles.includes(id))) {
+        const role = newMember.roles.cache.get(id);
+        addedRoles.push({ id, name: role ? role.name : "Unknown Role" });
+      }
+      for (const id of oldRoles.filter(id => !newRoles.includes(id))) {
+        const role = oldMember.roles.cache.get(id);
+        removedRoles.push({ id, name: role ? role.name : "Unknown Role" });
+      }
+    }
+
+    if (addedRoles.length === 0 && removedRoles.length === 0) return;
+
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    for (const r of removedRoles) {
+      addRoleLog(newMember.id, {
+        type: "remove",
+        roleId: r.id,
+        roleName: r.name || "Unknown Role",
+        moderatorId,
+        reason,
+        timestamp
+      });
+    }
+    for (const r of addedRoles) {
+      addRoleLog(newMember.id, {
+        type: "add",
+        roleId: r.id,
+        roleName: r.name || "Unknown Role",
+        moderatorId,
+        reason,
+        timestamp
+      });
+    }
+  } catch (err) {
+    console.error("Error in rolelogs guildMemberUpdate:", err);
+  }
+});
+
+// ============================================================
 // READY
 // ============================================================
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`🆔 Bot ID: ${client.user.id}`);
   console.log("Merged Bot (astra + JAIL) is online.");
+
+  try {
+    client.user.setPresence({
+      activities: [{ name: "◜𝑨𝑺𝑻𝑹𝑨◞", type: ActivityType.Streaming, url: "https://www.twitch.tv/user_029398338" }],
+      status: "online"
+    });
+  } catch (e) {
+    console.error("Presence error:", e);
+  }
 
   // Cache invites for all guilds
   for (const guild of client.guilds.cache.values()) {
@@ -3878,6 +5134,20 @@ client.once("ready", async () => {
 // ============================================================
 client.on("error", console.error);
 process.on("unhandledRejection", console.error);
+
+// ============================================================
+// KEEP ALIVE (باش ما ينامش فـ Render Free)
+// ============================================================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("Bot is online ✅");
+});
+
+app.listen(PORT, () => {
+  console.log(`Keep-alive server running on port ${PORT}`);
+});
 
 // ============================================================
 // LOGIN (واحد فقط)
